@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import logging
 import matplotlib
 import cv2
+import subprocess
+import tensorflow as tf
 
 # Forcer Matplotlib à utiliser un backend non interactif
 matplotlib.use('Agg')
@@ -123,6 +125,23 @@ def detect_edges(filepath):
         cv2.imwrite(edge_path, edges)
         return '/' + edge_path.replace('\\', '/')
 
+# Charger le modèle une seule fois au démarrage
+model = tf.keras.models.load_model("model_trash_classifier.h5")
+
+# Fonction pour prédire la catégorie d'une image
+def predict_image_category(filepath):
+    from tensorflow.keras.preprocessing import image
+    from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+
+    img = image.load_img(filepath, target_size=(224, 224))
+    img_array = image.img_to_array(img)
+    img_array = preprocess_input(img_array)
+    img_array = np.expand_dims(img_array, axis=0)
+
+    pred = model.predict(img_array)[0][0]
+    label = "dirty" if pred > 0.5 else "clean"
+    return label
+
 @app.route('/', methods=['GET', 'POST'])
 def upload_image():
     if request.method == 'POST':
@@ -146,6 +165,11 @@ def upload_image():
             # Détecter les contours de l'image
             edge_path = detect_edges(filepath)
 
+            # Prédire si l'image est pleine ou vide
+            label = predict_image_category(filepath)
+            annotation = "pleine" if label == "dirty" else "vide"
+
+            # Ajouter l'annotation prédite dans la base de données
             with sqlite3.connect('database.db') as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
@@ -158,7 +182,7 @@ def upload_image():
                 ''', (
                     filepath,
                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    None,
+                    annotation,  # Annotation prédite
                     features['filesize'],
                     features['width'],
                     features['height'],
