@@ -29,7 +29,7 @@
 
             <!-- Affichage des contours détectés -->
             <h3>Contours détectés</h3>
-            <img src="{{ image['edge_plot'] }}" alt="Contours détectés" width="300"><br>
+            <img src="{{ image['edge_image'] }}" alt="Contours détectés" width="300"><br>
 
             <!-- Boutons d’annotation -->
             <a href="{{ url_for('annotate', image_id=image['id'], annotation='Pleine') }}">Pleine</a> |

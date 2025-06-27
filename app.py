@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from flask import Flask, request, render_template, redirect, url_for
@@ -14,8 +15,14 @@ import cv2
 matplotlib.use('Agg')
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif'}
+app.config['UPLOAD_FOLDER'] = 'static/uploads/userImg'
+HISTOGRAM_FOLDER = 'static/uploads/histogramme'
+EDGE_FOLDER = 'static/uploads/edge'
+
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(HISTOGRAM_FOLDER, exist_ok=True)
+os.makedirs(EDGE_FOLDER, exist_ok=True)
 
 # Configurer le logging
 logging.basicConfig(level=logging.DEBUG)
@@ -39,9 +46,24 @@ def init_db():
                 avg_color_r INTEGER,
                 avg_color_g INTEGER,
                 avg_color_b INTEGER,
-                contrast REAL
+                contrast REAL,
+                histogram_data TEXT,
+                histogram_image TEXT,
+                edge_image TEXT
             )
         ''')
+        try:
+            cursor.execute("ALTER TABLE images ADD COLUMN histogram_data TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE images ADD COLUMN histogram_image TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE images ADD COLUMN edge_image TEXT")
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
 
 init_db()
@@ -86,38 +108,20 @@ def generate_histogram_plot(filepath, histogram_r, histogram_g, histogram_b):
     plt.ylabel('Fréquence')
     plt.legend()
 
-    # Enregistrer le graphique dans le dossier static/uploads
     filename = os.path.basename(filepath).rsplit('.', 1)[0] + '_histogram.png'
-    plot_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    plot_path = os.path.join(HISTOGRAM_FOLDER, filename)
     plt.savefig(plot_path)
     plt.close()
-
-    if os.path.exists(plot_path):
-        logging.debug(f"Graphique enregistré avec succès à : {plot_path}")
-    else:
-        logging.error(f"Échec de l'enregistrement du graphique à : {plot_path}")
-
-    return '/static/' + plot_path.replace('static/', '')  # Retourner le chemin relatif à /static/
+    return '/' + plot_path.replace('\\', '/')
 
 # Fonction pour détecter les contours d'une image
 def detect_edges(filepath):
-    # Charger l'image en niveaux de gris
-    image = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
-    
-    # Appliquer l'algorithme de détection de contours Canny
-    edges = cv2.Canny(image, threshold1=100, threshold2=200)
-    
-    # Enregistrer l'image des contours dans le dossier static/uploads
-    edge_filename = os.path.basename(filepath).rsplit('.', 1)[0] + '_edges.png'
-    edge_path = os.path.join(app.config['UPLOAD_FOLDER'], edge_filename)
-    cv2.imwrite(edge_path, edges)
-
-    if os.path.exists(edge_path):
-        logging.debug(f"Contours enregistrés avec succès à : {edge_path}")
-    else:
-        logging.error(f"Échec de l'enregistrement des contours à : {edge_path}")
-
-    return '/static/uploads/' + edge_filename
+        image = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+        edges = cv2.Canny(image, threshold1=100, threshold2=200)
+        edge_filename = os.path.basename(filepath).rsplit('.', 1)[0] + '_edges.png'
+        edge_path = os.path.join(EDGE_FOLDER, edge_filename)
+        cv2.imwrite(edge_path, edges)
+        return '/' + edge_path.replace('\\', '/')
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_image():
@@ -134,17 +138,23 @@ def upload_image():
 
             # Générer le graphique des histogrammes
             plot_path = generate_histogram_plot(filepath, features['histogram_r'], features['histogram_g'], features['histogram_b'])
-
-            logging.debug(f"Chemin du graphique : {plot_path}")
-
+            histogram_data = json.dumps({
+                'r': features['histogram_r'],
+                'g': features['histogram_g'],
+                'b': features['histogram_b']
+            })
             # Détecter les contours de l'image
             edge_path = detect_edges(filepath)
 
             with sqlite3.connect('database.db') as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    INSERT INTO images (filepath, upload_date, annotation, filesize, width, height, avg_color_r, avg_color_g, avg_color_b, contrast)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO images (
+                        filepath, upload_date, annotation, filesize, width, height,
+                        avg_color_r, avg_color_g, avg_color_b, contrast,
+                        histogram_data, histogram_image, edge_image
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     filepath,
                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -155,13 +165,16 @@ def upload_image():
                     features['avg_color_r'],
                     features['avg_color_g'],
                     features['avg_color_b'],
-                    features['contrast']
+                    features['contrast'],
+                    histogram_data,
+                    plot_path,
+                    edge_path
                 ))
                 conn.commit()
             return redirect(url_for('upload_image'))
 
     with sqlite3.connect('database.db') as conn:
-        images = conn.execute("SELECT id, filepath, upload_date, annotation, filesize, width, height, avg_color_r, avg_color_g, avg_color_b, contrast FROM images").fetchall()
+        images = conn.execute("SELECT id, filepath, upload_date, annotation, filesize, width, height, avg_color_r, avg_color_g, avg_color_b, contrast, histogram_data, histogram_image, edge_image FROM images").fetchall()
 
     # Conversion de la taille en Ko/Mo pour l'affichage et ajout des histogrammes
     images = [
@@ -177,8 +190,9 @@ def upload_image():
             'avg_color_g': img[8],
             'avg_color_b': img[9],
             'contrast': img[10],
-            'histogram_plot': '/static/uploads/' + os.path.basename(img[1]).rsplit('.', 1)[0] + '_histogram.png',
-            'edge_plot': '/static/uploads/' + os.path.basename(img[1]).rsplit('.', 1)[0] + '_edges.png'
+            'histogram_data': img[11],
+            'histogram_plot': img[12],
+            'edge_image': img[13]
         }
         for img in images
     ]
