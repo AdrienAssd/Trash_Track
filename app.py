@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import logging
 import matplotlib
+import cv2
 
 # Forcer Matplotlib à utiliser un backend non interactif
 matplotlib.use('Agg')
@@ -98,6 +99,26 @@ def generate_histogram_plot(filepath, histogram_r, histogram_g, histogram_b):
 
     return '/static/' + plot_path.replace('static/', '')  # Retourner le chemin relatif à /static/
 
+# Fonction pour détecter les contours d'une image
+def detect_edges(filepath):
+    # Charger l'image en niveaux de gris
+    image = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+    
+    # Appliquer l'algorithme de détection de contours Canny
+    edges = cv2.Canny(image, threshold1=100, threshold2=200)
+    
+    # Enregistrer l'image des contours dans le dossier static/uploads
+    edge_filename = os.path.basename(filepath).rsplit('.', 1)[0] + '_edges.png'
+    edge_path = os.path.join(app.config['UPLOAD_FOLDER'], edge_filename)
+    cv2.imwrite(edge_path, edges)
+
+    if os.path.exists(edge_path):
+        logging.debug(f"Contours enregistrés avec succès à : {edge_path}")
+    else:
+        logging.error(f"Échec de l'enregistrement des contours à : {edge_path}")
+
+    return '/static/uploads/' + edge_filename
+
 @app.route('/', methods=['GET', 'POST'])
 def upload_image():
     if request.method == 'POST':
@@ -115,6 +136,9 @@ def upload_image():
             plot_path = generate_histogram_plot(filepath, features['histogram_r'], features['histogram_g'], features['histogram_b'])
 
             logging.debug(f"Chemin du graphique : {plot_path}")
+
+            # Détecter les contours de l'image
+            edge_path = detect_edges(filepath)
 
             with sqlite3.connect('database.db') as conn:
                 cursor = conn.cursor()
@@ -153,7 +177,8 @@ def upload_image():
             'avg_color_g': img[8],
             'avg_color_b': img[9],
             'contrast': img[10],
-            'histogram_plot': '/static/uploads/' + os.path.basename(img[1]).rsplit('.', 1)[0] + '_histogram.png'
+            'histogram_plot': '/static/uploads/' + os.path.basename(img[1]).rsplit('.', 1)[0] + '_histogram.png',
+            'edge_plot': '/static/uploads/' + os.path.basename(img[1]).rsplit('.', 1)[0] + '_edges.png'
         }
         for img in images
     ]
@@ -180,6 +205,14 @@ def delete_image(image_id):
             # Supprimer le fichier du disque
             if os.path.exists(filepath):
                 os.remove(filepath)
+            # Supprimer le fichier histogramme associé
+            histogram_path = filepath.rsplit('.', 1)[0] + '_histogram.png'
+            if os.path.exists(histogram_path):
+                os.remove(histogram_path)
+            # Supprimer le fichier de contours associé
+            edge_path = filepath.rsplit('.', 1)[0] + '_edges.png'
+            if os.path.exists(edge_path):
+                os.remove(edge_path)
             # Supprimer de la base de données
             cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
             conn.commit()

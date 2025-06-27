@@ -27,6 +27,10 @@
             <h3>Graphique des histogrammes des couleurs</h3>
             <img src="{{ image['histogram_plot'] }}" alt="Histogramme des couleurs" width="300"><br>
 
+            <!-- Affichage des contours détectés -->
+            <h3>Contours détectés</h3>
+            <img src="{{ image['edge_plot'] }}" alt="Contours détectés" width="300"><br>
+
             <!-- Boutons d’annotation -->
             <a href="{{ url_for('annotate', image_id=image['id'], annotation='Pleine') }}">Pleine</a> |
             <a href="{{ url_for('annotate', image_id=image['id'], annotation='Vide') }}">Vide</a> |
