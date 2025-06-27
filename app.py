@@ -1,7 +1,7 @@
 import json
 import os
 import sqlite3
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for, send_from_directory
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from PIL import Image
@@ -143,6 +143,87 @@ def predict_image_category(filepath):
     return label
 
 @app.route('/', methods=['GET', 'POST'])
+def home():
+    if request.method == 'POST':
+        file = request.files.get('file')
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+
+            logging.debug(f"Fichier téléchargé à : {filepath}")
+
+            features = extract_image_features(filepath)
+
+            # Générer le graphique des histogrammes
+            plot_path = generate_histogram_plot(filepath, features['histogram_r'], features['histogram_g'], features['histogram_b'])
+            histogram_data = json.dumps({
+                'r': features['histogram_r'],
+                'g': features['histogram_g'],
+                'b': features['histogram_b']
+            })
+            # Détecter les contours de l'image
+            edge_path = detect_edges(filepath)
+
+            # Prédire si l'image est pleine ou vide
+            label = predict_image_category(filepath)
+            annotation = "pleine" if label == "dirty" else "vide"
+
+            # Ajouter l'annotation prédite dans la base de données
+            with sqlite3.connect('database.db') as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO images (
+                        filepath, upload_date, annotation, filesize, width, height,
+                        avg_color_r, avg_color_g, avg_color_b, contrast,
+                        histogram_data, histogram_image, edge_image
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    filepath,
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    annotation,  # Annotation prédite
+                    features['filesize'],
+                    features['width'],
+                    features['height'],
+                    features['avg_color_r'],
+                    features['avg_color_g'],
+                    features['avg_color_b'],
+                    features['contrast'],
+                    histogram_data,
+                    plot_path,
+                    edge_path
+                ))
+                conn.commit()
+            return redirect(url_for('home'))
+
+    # Récupérer la dernière image uploadée pour l'affichage
+    with sqlite3.connect('database.db') as conn:
+        latest_image = conn.execute("SELECT id, filepath, upload_date, annotation, filesize, width, height, avg_color_r, avg_color_g, avg_color_b, contrast, histogram_data, histogram_image, edge_image FROM images ORDER BY id DESC LIMIT 1").fetchone()
+
+    latest_image_data = None
+    if latest_image:
+        img = latest_image
+        latest_image_data = {
+            'id': img[0],
+            'filepath': img[1],
+            'upload_date': img[2],
+            'annotation': img[3],
+            'filesize': f"{img[4] / 1024:.2f} Ko" if img[4] < 1024 * 1024 else f"{img[4] / (1024 * 1024):.2f} Mo",
+            'width': img[5],
+            'height': img[6],
+            'avg_color_r': img[7],
+            'avg_color_g': img[8],
+            'avg_color_b': img[9],
+            'contrast': img[10],
+            'histogram_data': img[11],
+            'histogram_plot': img[12],
+            'edge_image': img[13]
+        }
+
+    return render_template('index.html', latest_image=latest_image_data)
+
+@app.route('/upload', methods=['GET', 'POST'])
 def upload_image():
     if request.method == 'POST':
         file = request.files.get('file')
@@ -253,6 +334,30 @@ def delete_image(image_id):
             cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
             conn.commit()
     return redirect(url_for('upload_image'))
+
+@app.route('/static/<path:filename>')
+def static_files(filename):
+    return send_from_directory('static', filename)
+
+@app.route('/styles.css')
+def styles_css():
+    return send_from_directory('static', 'styles.css')
+
+@app.route('/images/<path:filename>')
+def images(filename):
+    return send_from_directory('static/images', filename)
+
+@app.route('/apropos.html')
+def apropos():
+    return send_from_directory('.', 'apropos.html')
+
+@app.route('/contact.html')
+def contact():
+    return send_from_directory('.', 'contact.html')
+
+@app.route('/dashboard.html')
+def dashboard():
+    return send_from_directory('.', 'dashboard.html')
 
 if __name__ == '__main__':
     app.run(debug=True)

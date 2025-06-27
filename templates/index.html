@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrashTrack - Gestion Intelligente des Déchets</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <img src="{{ url_for('static', filename='images/Logo_TrashTrack.png') }}" alt="TrashTrack" class="logo-img">
+            </div>
+            <nav class="nav">
+                <a href="{{ url_for('home') }}" class="nav-link">Accueil</a>
+                <a href="/dashboard.html" class="nav-link">Dashboard</a>
+                <a href="/apropos.html" class="nav-link">À propos</a>
+                <a href="#" class="nav-link">Resources</a>
+                <a href="/contact.html" class="nav-link">Contact</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <div class="upload-section">
+                <div class="trash-container">
+                    <div class="trash-bin">
+                        <div class="trash-lid"></div>
+                        <div class="trash-body">
+                            <div class="upload-button">
+                                <form method="POST" enctype="multipart/form-data">
+                                    <label for="file-upload" class="upload-btn" title="Cliquer pour uploader une image" style="cursor:pointer;display:inline-block;">
+                                        <img src="{{ url_for('static', filename='images/Upload_button.png') }}" alt="Icône d'upload" width="48" height="48">
+                                        <input id="file-upload" type="file" name="file" required style="display:none;" onchange="this.form.submit()">
+                                    </label>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="image-preview">
+                    {% if latest_image %}
+                    <h3>Dernière image analysée</h3>
+                    <div class="image-details">
+                        <img src="{{ latest_image['filepath'] }}" alt="Image uploadée" class="uploaded-image">
+                        <div class="image-info">
+                            <p><strong>Statut:</strong> <span class="status-{{ latest_image['annotation'] }}">{{ latest_image['annotation'].title() }}</span></p>
+                            <p><strong>Dimensions:</strong> {{ latest_image['width'] }}x{{ latest_image['height'] }}</p>
+                            <p><strong>Taille:</strong> {{ latest_image['filesize'] }}</p>
+                            <p><strong>Date d'upload:</strong> {{ latest_image['upload_date'] }}</p>
+                            <p><strong>Contraste:</strong> {{ "%.2f"|format(latest_image['contrast']) }}</p>
+                            <p><strong>Couleur moyenne:</strong> RGB({{ latest_image['avg_color_r'] }}, {{ latest_image['avg_color_g'] }}, {{ latest_image['avg_color_b'] }})</p>
+                        </div>
+                        
+                        <div class="analysis-images">
+                            <div class="histogram-section">
+                                <h4>Histogramme des couleurs</h4>
+                                <img src="{{ latest_image['histogram_plot'] }}" alt="Histogramme des couleurs" class="analysis-image">
+                            </div>
+                            
+                            <div class="edges-section">
+                                <h4>Contours détectés</h4>
+                                <img src="{{ latest_image['edge_image'] }}" alt="Contours détectés" class="analysis-image">
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p>Uploadez une image pour voir l'aperçu et les caractéristiques</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <div class="footer-logo">
+                        <img src="{{ url_for('static', filename='images/Logo_TrashTrack_Gris.png') }}" alt="TrashTrack" class="logo-img">
+                    </div>
+                    <div class="social-icons">
+                        <a href="https://github.com/AdrienAssd/Trash_Track" class="social-icon">
+                            <img src="{{ url_for('static', filename='images/github_blanc.png') }}" alt="GitHub" style="height: 24px; width: 24px;">
+                        </a>
+                        <a href="#" class="social-icon">📷</a>
+                        <a href="#" class="social-icon">🎥​</a>
+                    </div>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Notre équipe</h3>
+                    <ul>
+                        <li><a href="https://www.linkedin.com/in/alexandre-munier-a9a8a9251/">Alexandre MUNIER</a></li>
+                        <li><a href="https://www.linkedin.com/in/thibault-bial/">Thibault BIAL</a></li>
+                        <li><a href="https://www.linkedin.com/in/adrien-assouad-94a047252/">Adrien ASSOUAD</a></li>
+                        <li><a href="https://www.linkedin.com/in/malo-clement-751666253/">Malo CLEMENT</a></li>
+                        <li><a href="https://www.linkedin.com/in/fabio-scaramuzzino-314139252/">Fabio SCARAMUZZINO</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Technologies utilisées</h3>
+                    <ul>
+                        <li><a href="#">Python</a></li>
+                        <li><a href="#">NumPy / Matplotlib / OpenCV</a></li>
+                        <li><a href="#">HTML / CSS</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Resources</h3>
+                    <ul>
+                        <li><a href="{{ url_for('static', filename='Master_camp-Data_Final.pdf') }}" target="_blank">PDF-Consigne</a></li>
+                        <li><a href="https://github.com/AGhaziBla/Solution_Factory_Data/tree/main">GitHub-Consigne</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
