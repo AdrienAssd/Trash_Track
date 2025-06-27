@@ -212,21 +212,19 @@ def annotate(image_id, annotation):
 def delete_image(image_id):
     with sqlite3.connect('database.db') as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT filepath FROM images WHERE id = ?", (image_id,))
+        cursor.execute("SELECT filepath, histogram_image, edge_image FROM images WHERE id = ?", (image_id,))
         row = cursor.fetchone()
         if row:
-            filepath = row[0]
-            # Supprimer le fichier du disque
+            filepath, histogram_path, edge_path = row
+            # Supprimer le fichier d'origine
             if os.path.exists(filepath):
                 os.remove(filepath)
             # Supprimer le fichier histogramme associé
-            histogram_path = filepath.rsplit('.', 1)[0] + '_histogram.png'
-            if os.path.exists(histogram_path):
-                os.remove(histogram_path)
+            if histogram_path and os.path.exists(histogram_path.lstrip('/')):
+                os.remove(histogram_path.lstrip('/'))
             # Supprimer le fichier de contours associé
-            edge_path = filepath.rsplit('.', 1)[0] + '_edges.png'
-            if os.path.exists(edge_path):
-                os.remove(edge_path)
+            if edge_path and os.path.exists(edge_path.lstrip('/')):
+                os.remove(edge_path.lstrip('/'))
             # Supprimer de la base de données
             cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
             conn.commit()
