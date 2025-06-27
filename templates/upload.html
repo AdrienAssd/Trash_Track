@@ -15,20 +15,24 @@
     <ul>
         {% for image in images %}
         <li>
-            <img src="{{ '/' + image[1] }}" width="150"><br>
-            ID: {{ image[0] }}<br>
-            Annotée: {{ image[3] or "Non" }}<br>
-            Dimensions: {{ image[5] }}x{{ image[6] }}<br>
-            Taille: {{ image[4] }} octets<br>
-            Moy. couleur: ({{ image[7] }}, {{ image[8] }}, {{ image[9] }})<br>
-            Contraste: {{ "%.2f"|format(image[10]) }}<br>
+            <img src="{{ image['filepath'] }}" width="150"><br>
+            ID: {{ image['id'] }}<br>
+            Annotée: {{ image['annotation'] or "Non" }}<br>
+            Dimensions: {{ image['width'] }}x{{ image['height'] }}<br>
+            Taille: {{ image['filesize'] }}<br>
+            Moy. couleur: ({{ image['avg_color_r'] }}, {{ image['avg_color_g'] }}, {{ image['avg_color_b'] }})<br>
+            Contraste: {{ "%.2f"|format(image['contrast']) }}<br>
+
+            <!-- Affichage du graphique des histogrammes -->
+            <h3>Graphique des histogrammes des couleurs</h3>
+            <img src="{{ image['histogram_plot'] }}" alt="Histogramme des couleurs" width="300"><br>
 
             <!-- Boutons d’annotation -->
-            <a href="{{ url_for('annotate', image_id=image[0], annotation='Pleine') }}">Pleine</a> |
-            <a href="{{ url_for('annotate', image_id=image[0], annotation='Vide') }}">Vide</a> |
+            <a href="{{ url_for('annotate', image_id=image['id'], annotation='Pleine') }}">Pleine</a> |
+            <a href="{{ url_for('annotate', image_id=image['id'], annotation='Vide') }}">Vide</a> |
 
             <!-- Bouton de suppression -->
-            <a href="{{ url_for('delete_image', image_id=image[0]) }}" onclick="return confirm('Supprimer cette image ?')">🗑 Supprimer</a>
+            <a href="{{ url_for('delete_image', image_id=image['id']) }}" onclick="return confirm('Supprimer cette image ?')">🗑 Supprimer</a>
         </li>
         <hr>
         {% endfor %}
