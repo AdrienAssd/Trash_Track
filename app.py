@@ -7,6 +7,10 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
+import matplotlib
+
+# Forcer Matplotlib à utiliser un backend non interactif
+matplotlib.use('Agg')
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
