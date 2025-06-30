@@ -1,7 +1,7 @@
 import json
 import os
 import sqlite3
-from flask import Flask, request, render_template, redirect, url_for, send_from_directory
+from flask import Flask, request, render_template, redirect, url_for
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from PIL import Image
@@ -114,7 +114,7 @@ def generate_histogram_plot(filepath, histogram_r, histogram_g, histogram_b):
     plot_path = os.path.join(HISTOGRAM_FOLDER, filename)
     plt.savefig(plot_path)
     plt.close()
-    return plot_path.replace('\\', '/')
+    return '/' + plot_path.replace('\\', '/')
 
 # Fonction pour détecter les contours d'une image
 def detect_edges(filepath):
@@ -123,7 +123,7 @@ def detect_edges(filepath):
         edge_filename = os.path.basename(filepath).rsplit('.', 1)[0] + '_edges.png'
         edge_path = os.path.join(EDGE_FOLDER, edge_filename)
         cv2.imwrite(edge_path, edges)
-        return edge_path.replace('\\', '/')
+        return '/' + edge_path.replace('\\', '/')
 
 # Charger le modèle une seule fois au démarrage
 model = tf.keras.models.load_model("model_trash_classifier.h5")
@@ -143,16 +143,13 @@ def predict_image_category(filepath):
     return label
 
 @app.route('/', methods=['GET', 'POST'])
-def home():
+def upload_image():
     if request.method == 'POST':
         file = request.files.get('file')
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
-            
-            # Normaliser le chemin pour les URLs web (remplacer \ par /)
-            web_filepath = filepath.replace('\\', '/')
 
             logging.debug(f"Fichier téléchargé à : {filepath}")
 
@@ -160,8 +157,6 @@ def home():
 
             # Générer le graphique des histogrammes
             plot_path = generate_histogram_plot(filepath, features['histogram_r'], features['histogram_g'], features['histogram_b'])
-            web_plot_path = plot_path.replace('\\', '/') if plot_path else None
-            
             histogram_data = json.dumps({
                 'r': features['histogram_r'],
                 'g': features['histogram_g'],
@@ -169,7 +164,6 @@ def home():
             })
             # Détecter les contours de l'image
             edge_path = detect_edges(filepath)
-            web_edge_path = edge_path.replace('\\', '/') if edge_path else None
 
             # Prédire si l'image est pleine ou vide
             label = predict_image_category(filepath)
@@ -186,7 +180,7 @@ def home():
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    web_filepath,  # Utiliser le chemin web normalisé
+                    filepath,
                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     annotation,  # Annotation prédite
                     features['filesize'],
@@ -197,20 +191,18 @@ def home():
                     features['avg_color_b'],
                     features['contrast'],
                     histogram_data,
-                    web_plot_path,  # Utiliser le chemin web normalisé
-                    web_edge_path   # Utiliser le chemin web normalisé
+                    plot_path,
+                    edge_path
                 ))
                 conn.commit()
-            return redirect(url_for('home'))
+            return redirect(url_for('upload_image'))
 
-    # Récupérer la dernière image uploadée pour l'affichage
     with sqlite3.connect('database.db') as conn:
-        latest_image = conn.execute("SELECT id, filepath, upload_date, annotation, filesize, width, height, avg_color_r, avg_color_g, avg_color_b, contrast, histogram_data, histogram_image, edge_image FROM images ORDER BY id DESC LIMIT 1").fetchone()
+        images = conn.execute("SELECT id, filepath, upload_date, annotation, filesize, width, height, avg_color_r, avg_color_g, avg_color_b, contrast, histogram_data, histogram_image, edge_image FROM images").fetchall()
 
-    latest_image_data = None
-    if latest_image:
-        img = latest_image
-        latest_image_data = {
+    # Conversion de la taille en Ko/Mo pour l'affichage et ajout des histogrammes
+    images = [
+        {
             'id': img[0],
             'filepath': img[1],
             'upload_date': img[2],
@@ -223,34 +215,22 @@ def home():
             'avg_color_b': img[9],
             'contrast': img[10],
             'histogram_data': img[11],
-            'histogram_image': img[12],
+            'histogram_plot': img[12],
             'edge_image': img[13]
         }
+        for img in images
+    ]
 
-    return render_template('index.html', latest_image=latest_image_data)
+    logging.debug(f"Images transmises au modèle : {images}")
+
+    return render_template('upload.html', images=images)
 
 @app.route('/annotate/<int:image_id>/<annotation>')
 def annotate(image_id, annotation):
     with sqlite3.connect('database.db') as conn:
         conn.execute("UPDATE images SET annotation = ? WHERE id = ?", (annotation, image_id))
         conn.commit()
-    return redirect(url_for('historique'))
-
-@app.route('/annotate_latest/<annotation>')
-def annotate_latest(annotation):
-    """Annoter la dernière image uploadée et rediriger vers l'accueil"""
-    with sqlite3.connect('database.db') as conn:
-        cursor = conn.cursor()
-        # Récupérer l'ID de la dernière image
-        cursor.execute("SELECT id FROM images ORDER BY id DESC LIMIT 1")
-        latest_image = cursor.fetchone()
-        
-        if latest_image:
-            # Mettre à jour l'annotation de la dernière image
-            cursor.execute("UPDATE images SET annotation = ? WHERE id = ?", (annotation, latest_image[0]))
-            conn.commit()
-    
-    return redirect(url_for('home'))
+    return redirect(url_for('upload_image'))
 
 @app.route('/delete/<int:image_id>')
 def delete_image(image_id):
@@ -272,92 +252,7 @@ def delete_image(image_id):
             # Supprimer de la base de données
             cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
             conn.commit()
-    return redirect(url_for('historique'))
-
-@app.route('/static/<path:filename>')
-def static_files(filename):
-    return send_from_directory('static', filename)
-
-@app.route('/styles.css')
-def styles_css():
-    return send_from_directory('static', 'styles.css')
-
-@app.route('/images/<path:filename>')
-def images(filename):
-    return send_from_directory('static/images', filename)
-
-@app.route('/apropos.html')
-def apropos():
-    return send_from_directory('.', 'apropos.html')
-
-@app.route('/contact.html')
-def contact():
-    return send_from_directory('.', 'contact.html')
-
-@app.route('/dashboard.html')
-def dashboard():
-    return send_from_directory('.', 'dashboard.html')
-
-@app.route('/historique')
-def historique():
-    """Page d'historique de toutes les images analysées"""
-    filter_type = request.args.get('filter')
-    
-    with sqlite3.connect('database.db') as conn:
-        cursor = conn.cursor()
-        
-        # Récupérer toutes les images avec filtre optionnel
-        if filter_type == 'pleine':
-            cursor.execute('SELECT * FROM images WHERE annotation = "pleine" ORDER BY upload_date DESC')
-        elif filter_type == 'vide':
-            cursor.execute('SELECT * FROM images WHERE annotation = "vide" ORDER BY upload_date DESC')
-        elif filter_type == 'non_annotees':
-            cursor.execute('SELECT * FROM images WHERE annotation IS NULL OR annotation = "" ORDER BY upload_date DESC')
-        else:
-            cursor.execute('SELECT * FROM images ORDER BY upload_date DESC')
-        
-        columns = [description[0] for description in cursor.description]
-        images = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        
-        # Calculer les statistiques
-        cursor.execute('SELECT COUNT(*) FROM images')
-        total_images = cursor.fetchone()[0]
-        
-        cursor.execute('SELECT COUNT(*) FROM images WHERE annotation IS NOT NULL AND annotation != ""')
-        annotated_images = cursor.fetchone()[0]
-        
-        cursor.execute('SELECT COUNT(*) FROM images WHERE annotation = "pleine"')
-        images_pleine = cursor.fetchone()[0]
-        
-        cursor.execute('SELECT COUNT(*) FROM images WHERE annotation = "vide"')
-        images_vide = cursor.fetchone()[0]
-        
-        # Formater les dates et tailles de fichiers
-        for image in images:
-            if image['upload_date']:
-                try:
-                    # Convertir la date en format plus lisible
-                    date_obj = datetime.strptime(image['upload_date'], '%Y-%m-%d %H:%M:%S')
-                    image['upload_date'] = date_obj.strftime('%d/%m/%Y à %H:%M')
-                except:
-                    pass
-            
-            # Formater la taille du fichier
-            if image['filesize']:
-                size_kb = image['filesize'] / 1024
-                if size_kb < 1024:
-                    image['filesize'] = f"{size_kb:.1f} KB"
-                else:
-                    size_mb = size_kb / 1024
-                    image['filesize'] = f"{size_mb:.1f} MB"
-    
-    return render_template('historique.html',
-                         images=images,
-                         total_images=total_images,
-                         annotated_images=annotated_images,
-                         images_pleine=images_pleine,
-                         images_vide=images_vide,
-                         filter_type=filter_type)
+    return redirect(url_for('upload_image'))
 
 if __name__ == '__main__':
     app.run(debug=True)

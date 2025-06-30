@@ -827,7 +827,64 @@ body {
     margin: 0 auto;
 }
 
-/* Responsive Design */
+/* Manual annotation styles */
+.manual-annotation {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.manual-annotation p {
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.annotation-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: none;
+    text-align: center;
+    min-width: 140px;
+}
+
+.btn-full {
+    background: linear-gradient(145deg, #FF6B6B, #FF5252);
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+.btn-full:hover {
+    background: linear-gradient(145deg, #FF5252, #F44336);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+}
+
+.btn-empty {
+    background: linear-gradient(145deg, #66BB6A, #4CAF50);
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 187, 106, 0.3);
+}
+
+.btn-empty:hover {
+    background: linear-gradient(145deg, #4CAF50, #388E3C);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 187, 106, 0.4);
+}
+
 @media (max-width: 768px) {
     .header .container {
         flex-direction: column;
@@ -889,5 +946,13 @@ body {
 @media (max-width: 480px) {
     .footer-content {
         grid-template-columns: 1fr;
+    }
+    
+    .annotation-buttons {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
     }
 }

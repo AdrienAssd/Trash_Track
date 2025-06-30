@@ -16,7 +16,7 @@
                 <a href="{{ url_for('home') }}" class="nav-link">Accueil</a>
                 <a href="/dashboard.html" class="nav-link">Dashboard</a>
                 <a href="/apropos.html" class="nav-link">À propos</a>
-                <a href="#" class="nav-link">Resources</a>
+                <a href="{{ url_for('historique') }}" class="nav-link">Historique</a>
                 <a href="/contact.html" class="nav-link">Contact</a>
             </nav>
         </div>
@@ -44,7 +44,7 @@
                     {% if latest_image %}
                     <h3>Dernière image analysée</h3>
                     <div class="image-details">
-                        <img src="{{ latest_image['filepath'] }}" alt="Image uploadée" class="uploaded-image">
+                        <img src="/{{ latest_image['filepath'] }}" alt="Image uploadée" class="uploaded-image">
                         <div class="image-info">
                             <p><strong>Statut:</strong> <span class="status-{{ latest_image['annotation'] }}">{{ latest_image['annotation'].title() }}</span></p>
                             <p><strong>Dimensions:</strong> {{ latest_image['width'] }}x{{ latest_image['height'] }}</p>
@@ -52,17 +52,29 @@
                             <p><strong>Date d'upload:</strong> {{ latest_image['upload_date'] }}</p>
                             <p><strong>Contraste:</strong> {{ "%.2f"|format(latest_image['contrast']) }}</p>
                             <p><strong>Couleur moyenne:</strong> RGB({{ latest_image['avg_color_r'] }}, {{ latest_image['avg_color_g'] }}, {{ latest_image['avg_color_b'] }})</p>
+                            
+                            <div class="manual-annotation">
+                                <p><strong>Correction manuelle :</strong></p>
+                                <div class="annotation-buttons">
+                                    <a href="{{ url_for('annotate_latest', annotation='pleine') }}" class="btn btn-full" onclick="return confirm('Êtes-vous sûr de vouloir marquer cette poubelle comme pleine ?')">
+                                        🗑️ Marquer comme Pleine
+                                    </a>
+                                    <a href="{{ url_for('annotate_latest', annotation='vide') }}" class="btn btn-empty" onclick="return confirm('Êtes-vous sûr de vouloir marquer cette poubelle comme vide ?')">
+                                        ✨ Marquer comme Vide
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="analysis-images">
                             <div class="histogram-section">
                                 <h4>Histogramme des couleurs</h4>
-                                <img src="{{ latest_image['histogram_plot'] }}" alt="Histogramme des couleurs" class="analysis-image">
+                                <img src="/{{ latest_image['histogram_image'] }}" alt="Histogramme des couleurs" class="analysis-image">
                             </div>
                             
                             <div class="edges-section">
                                 <h4>Contours détectés</h4>
-                                <img src="{{ latest_image['edge_image'] }}" alt="Contours détectés" class="analysis-image">
+                                <img src="/{{ latest_image['edge_image'] }}" alt="Contours détectés" class="analysis-image">
                             </div>
                         </div>
                     </div>

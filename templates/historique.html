@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrashTrack - Historique des Analyses</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .resources-container {
+            padding: 2rem 0;
+            min-height: calc(100vh - 200px);
+        }
+        
+        .page-title {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 3rem;
+            font-size: 1.2rem;
+        }
+        
+        .stats-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #3498db;
+            display: block;
+        }
+        
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 1rem;
+            margin-top: 0.5rem;
+        }
+        
+        .images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .image-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .image-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+        
+        .image-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .image-id {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 1.1rem;
+        }
+        
+        .image-date {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+        
+        .main-image {
+            width: 100%;
+            max-height: 200px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .image-details {
+            margin-bottom: 1.5rem;
+        }
+        
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            padding: 0.3rem 0;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .detail-value {
+            color: #34495e;
+        }
+        
+        .status-annotation {
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+        
+        .status-pleine {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .status-vide {
+            background-color: #27ae60;
+            color: white;
+        }
+        
+        .status-non {
+            background-color: #95a5a6;
+            color: white;
+        }
+        
+        .analysis-section {
+            margin-top: 1rem;
+        }
+        
+        .analysis-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .analysis-images {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        
+        .analysis-item {
+            text-align: center;
+        }
+        
+        .analysis-item h4 {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            margin-bottom: 0.5rem;
+        }
+        
+        .analysis-image {
+            width: 100%;
+            max-height: 120px;
+            object-fit: contain;
+            border-radius: 8px;
+            background: #f8f9fa;
+            padding: 0.5rem;
+        }
+        
+        .no-images {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 1.2rem;
+            margin-top: 3rem;
+        }
+        
+        .filter-section {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        .filter-buttons {
+            display: inline-flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .filter-btn {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #2c3e50;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        
+        .filter-btn:hover {
+            background: #3498db;
+            color: white;
+            transform: translateY(-2px);
+        }
+        
+        .filter-btn.active {
+            background: #3498db;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <img src="{{ url_for('static', filename='images/Logo_TrashTrack.png') }}" alt="TrashTrack" class="logo-img">
+            </div>
+            <nav class="nav">
+                <a href="{{ url_for('home') }}" class="nav-link">Accueil</a>
+                <a href="/dashboard.html" class="nav-link">Dashboard</a>
+                <a href="/apropos.html" class="nav-link">À propos</a>
+                <a href="{{ url_for('historique') }}" class="nav-link active">Historique</a>
+                <a href="/contact.html" class="nav-link">Contact</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container resources-container">
+            <h1 class="page-title">📊 Historique des Analyses</h1>
+            <p class="subtitle">Consultez toutes les images analysées avec leurs caractéristiques détaillées</p>
+            
+            <!-- Section des statistiques -->
+            <div class="stats-section">
+                <div class="stat-card">
+                    <span class="stat-number">{{ total_images }}</span>
+                    <div class="stat-label">Images Analysées</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">{{ annotated_images }}</span>
+                    <div class="stat-label">Images Annotées</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">{{ images_pleine }}</span>
+                    <div class="stat-label">Poubelles Pleines</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-number">{{ images_vide }}</span>
+                    <div class="stat-label">Poubelles Vides</div>
+                </div>
+            </div>
+            
+            <!-- Section de filtrage -->
+            <div class="filter-section">
+                <div class="filter-buttons">
+                    <a href="{{ url_for('historique') }}" class="filter-btn {{ 'active' if not filter_type else '' }}">Toutes</a>
+                    <a href="{{ url_for('historique', filter='pleine') }}" class="filter-btn {{ 'active' if filter_type == 'pleine' else '' }}">Pleines</a>
+                    <a href="{{ url_for('historique', filter='vide') }}" class="filter-btn {{ 'active' if filter_type == 'vide' else '' }}">Vides</a>
+                    <a href="{{ url_for('historique', filter='non_annotees') }}" class="filter-btn {{ 'active' if filter_type == 'non_annotees' else '' }}">Non Annotées</a>
+                </div>
+            </div>
+            
+            <!-- Grille des images -->
+            {% if images %}
+            <div class="images-grid">
+                {% for image in images %}
+                <div class="image-card">
+                    <div class="image-header">
+                        <span class="image-id">Image #{{ image['id'] }}</span>
+                        <span class="image-date">{{ image['upload_date'] }}</span>
+                    </div>
+                    
+                    <img src="/{{ image['filepath'] }}" alt="Image analysée" class="main-image">
+                    
+                    <div class="image-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Statut:</span>
+                            <span class="detail-value">
+                                <span class="status-annotation status-{{ image['annotation'] or 'non' }}">
+                                    {{ image['annotation'] or "Non Annoté" }}
+                                </span>
+                            </span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Dimensions:</span>
+                            <span class="detail-value">{{ image['width'] }}×{{ image['height'] }} px</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Taille:</span>
+                            <span class="detail-value">{{ image['filesize'] }}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Contraste:</span>
+                            <span class="detail-value">{{ "%.2f"|format(image['contrast']) }}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Couleur moyenne:</span>
+                            <span class="detail-value">RGB({{ image['avg_color_r'] }}, {{ image['avg_color_g'] }}, {{ image['avg_color_b'] }})</span>
+                        </div>
+                    </div>
+                    
+                    <div class="analysis-section">
+                        <h3 class="analysis-title">Analyses Visuelles</h3>
+                        <div class="analysis-images">
+                            <div class="analysis-item">
+                                <h4>Histogramme des couleurs</h4>
+                                <img src="/{{ image['histogram_image'] }}" alt="Histogramme des couleurs" class="analysis-image">
+                            </div>
+                            <div class="analysis-item">
+                                <h4>Contours détectés</h4>
+                                <img src="/{{ image['edge_image'] }}" alt="Contours détectés" class="analysis-image">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="detail-row" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ecf0f1;">
+                        <span class="detail-label">Actions:</span>
+                        <span class="detail-value">
+                            {% if not image['annotation'] %}
+                            <a href="{{ url_for('annotate', image_id=image['id'], annotation='Pleine') }}" style="color: #e74c3c; text-decoration: none;">📝 Pleine</a> |
+                            <a href="{{ url_for('annotate', image_id=image['id'], annotation='Vide') }}" style="color: #27ae60; text-decoration: none;">📝 Vide</a> |
+                            {% endif %}
+                            <a href="{{ url_for('delete_image', image_id=image['id']) }}" 
+                               onclick="return confirm('Supprimer cette image ?')" 
+                               style="color: #e74c3c; text-decoration: none;">🗑️ Supprimer</a>
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="no-images">
+                <p>Aucune image trouvée pour les critères sélectionnés.</p>
+                <p><a href="{{ url_for('home') }}" style="color: #3498db; text-decoration: none;">Commencez par uploader votre première image →</a></p>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <div class="footer-logo">
+                        <img src="{{ url_for('static', filename='images/Logo_TrashTrack_Gris.png') }}" alt="TrashTrack" class="logo-img">
+                    </div>
+                    <div class="social-icons">
+                        <a href="https://github.com/AdrienAssd/Trash_Track" class="social-icon">
+                            <img src="{{ url_for('static', filename='images/github_blanc.png') }}" alt="GitHub" style="height: 24px; width: 24px;">
+                        </a>
+                        <a href="#" class="social-icon">📷</a>
+                        <a href="#" class="social-icon">🎥​</a>
+                    </div>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Notre équipe</h3>
+                    <ul>
+                        <li><a href="https://www.linkedin.com/in/alexandre-munier-a9a8a9251/">Alexandre MUNIER</a></li>
+                        <li><a href="https://www.linkedin.com/in/thibault-bial/">Thibault BIAL</a></li>
+                        <li><a href="https://www.linkedin.com/in/adrien-assouad-94a047252/">Adrien ASSOUAD</a></li>
+                        <li><a href="https://www.linkedin.com/in/malo-clement-751666253/">Malo CLEMENT</a></li>
+                        <li><a href="https://www.linkedin.com/in/fabio-scaramuzzino-314139252/">Fabio SCARAMUZZINO</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Technologies utilisées</h3>
+                    <ul>
+                        <li><a href="#">Python</a></li>
+                        <li><a href="#">NumPy / Matplotlib / OpenCV</a></li>
+                        <li><a href="#">HTML / CSS</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Resources</h3>
+                    <ul>
+                        <li><a href="{{ url_for('static', filename='Master_camp-Data_Final.pdf') }}" target="_blank">PDF-Consigne</a></li>
+                        <li><a href="https://github.com/AGhaziBla/Solution_Factory_Data/tree/main">GitHub-Consigne</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
