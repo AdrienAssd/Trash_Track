@@ -503,26 +503,40 @@ def dashboard_data():
 
 @app.route('/historique')
 def historique():
-    """Page d'historique de toutes les images analysées"""
+    """Page d'historique de toutes les images analysées avec pagination"""
     filter_type = request.args.get('filter')
+    page = int(request.args.get('page', 1))
+    per_page = 5  # Nombre d'images par page (Green IT)
+    offset = (page - 1) * per_page
     
     with sqlite3.connect('database.db') as conn:
         cursor = conn.cursor()
         
-        # Récupérer toutes les images avec filtre optionnel
+        # Construire la requête avec pagination
+        base_query = "SELECT * FROM images"
+        count_query = "SELECT COUNT(*) FROM images"
+        
         if filter_type == 'pleine':
-            cursor.execute('SELECT * FROM images WHERE annotation = "pleine" ORDER BY upload_date DESC')
+            where_clause = ' WHERE annotation = "pleine"'
         elif filter_type == 'vide':
-            cursor.execute('SELECT * FROM images WHERE annotation = "vide" ORDER BY upload_date DESC')
+            where_clause = ' WHERE annotation = "vide"'
         elif filter_type == 'non_annotees':
-            cursor.execute('SELECT * FROM images WHERE annotation IS NULL OR annotation = "" ORDER BY upload_date DESC')
+            where_clause = ' WHERE annotation IS NULL OR annotation = ""'
         else:
-            cursor.execute('SELECT * FROM images ORDER BY upload_date DESC')
+            where_clause = ''
+        
+        # Requête paginée
+        paginated_query = base_query + where_clause + f' ORDER BY upload_date DESC LIMIT {per_page} OFFSET {offset}'
+        cursor.execute(paginated_query)
         
         columns = [description[0] for description in cursor.description]
         images = [dict(zip(columns, row)) for row in cursor.fetchall()]
         
-        # Calculer les statistiques
+        # Compter le total d'images pour ce filtre
+        cursor.execute(count_query + where_clause)
+        total_filtered_images = cursor.fetchone()[0]
+        
+        # Calculer les statistiques globales
         cursor.execute('SELECT COUNT(*) FROM images')
         total_images = cursor.fetchone()[0]
         
@@ -554,13 +568,89 @@ def historique():
                     size_mb = size_kb / 1024
                     image['filesize'] = f"{size_mb:.1f} MB"
     
+    # Calculer la pagination
+    has_next = (page * per_page) < total_filtered_images
+    next_page = page + 1 if has_next else None
+    
     return render_template('historique.html',
                          images=images,
                          total_images=total_images,
                          annotated_images=annotated_images,
                          images_pleine=images_pleine,
                          images_vide=images_vide,
-                         filter_type=filter_type)
+                         filter_type=filter_type,
+                         current_page=page,
+                         has_next=has_next,
+                         next_page=next_page,
+                         total_filtered_images=total_filtered_images,
+                         images_shown=len(images),
+                         per_page=per_page)
+
+@app.route('/api/load_more_images')
+def load_more_images():
+    """API pour charger plus d'images (AJAX)"""
+    from flask import jsonify
+    
+    filter_type = request.args.get('filter')
+    page = int(request.args.get('page', 1))
+    per_page = 5  # Même nombre que dans historique()
+    offset = (page - 1) * per_page
+    
+    with sqlite3.connect('database.db') as conn:
+        cursor = conn.cursor()
+        
+        # Construire la requête avec pagination
+        base_query = "SELECT * FROM images"
+        count_query = "SELECT COUNT(*) FROM images"
+        
+        if filter_type == 'pleine':
+            where_clause = ' WHERE annotation = "pleine"'
+        elif filter_type == 'vide':
+            where_clause = ' WHERE annotation = "vide"'
+        elif filter_type == 'non_annotees':
+            where_clause = ' WHERE annotation IS NULL OR annotation = ""'
+        else:
+            where_clause = ''
+        
+        # Requête paginée
+        paginated_query = base_query + where_clause + f' ORDER BY upload_date DESC LIMIT {per_page} OFFSET {offset}'
+        cursor.execute(paginated_query)
+        
+        columns = [description[0] for description in cursor.description]
+        images = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        # Compter le total d'images pour ce filtre
+        cursor.execute(count_query + where_clause)
+        total_filtered_images = cursor.fetchone()[0]
+        
+        # Formater les dates et tailles de fichiers
+        for image in images:
+            if image['upload_date']:
+                try:
+                    # Convertir la date en format plus lisible
+                    date_obj = datetime.strptime(image['upload_date'], '%Y-%m-%d %H:%M:%S')
+                    image['upload_date'] = date_obj.strftime('%d/%m/%Y à %H:%M')
+                except:
+                    pass
+            
+            # Formater la taille du fichier
+            if image['filesize']:
+                size_kb = image['filesize'] / 1024
+                if size_kb < 1024:
+                    image['filesize'] = f"{size_kb:.1f} KB"
+                else:
+                    size_mb = size_kb / 1024
+                    image['filesize'] = f"{size_mb:.1f} MB"
+    
+    # Calculer s'il y a encore des images à charger
+    has_next = (page * per_page) < total_filtered_images
+    
+    return jsonify({
+        'images': images,
+        'has_next': has_next,
+        'next_page': page + 1 if has_next else None,
+        'total_filtered_images': total_filtered_images
+    })
 
 @app.route('/clear_history')
 def clear_history():
