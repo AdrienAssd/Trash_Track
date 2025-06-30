@@ -232,6 +232,27 @@
             background: #3498db;
             color: white;
         }
+        
+        .clear-history-btn {
+            padding: 0.8rem 1.5rem;
+            border: 2px solid #e74c3c;
+            border-radius: 25px;
+            background: rgba(231, 76, 60, 0.1);
+            color: #e74c3c;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 0.9rem;
+        }
+        
+        .clear-history-btn:hover {
+            background: #e74c3c;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -283,6 +304,16 @@
                     <a href="{{ url_for('historique', filter='vide') }}" class="filter-btn {{ 'active' if filter_type == 'vide' else '' }}">Vides</a>
                     <a href="{{ url_for('historique', filter='non_annotees') }}" class="filter-btn {{ 'active' if filter_type == 'non_annotees' else '' }}">Non Annotées</a>
                 </div>
+                
+                {% if total_images > 0 %}
+                <div style="margin-top: 1.5rem; text-align: center;">
+                    <a href="{{ url_for('clear_history') }}" 
+                       class="clear-history-btn" 
+                       onclick="return confirm('⚠️ ATTENTION ⚠️\n\nCette action va supprimer DÉFINITIVEMENT :\n• Toutes les images uploadées\n• Tous les histogrammes générés\n• Tous les fichiers de contours\n• Toutes les données de la base\n\nCette action est IRRÉVERSIBLE !\n\nÊtes-vous absolument sûr de vouloir continuer ?')">
+                        🗑️ Supprimer tout l'historique
+                    </a>
+                </div>
+                {% endif %}
             </div>
             
             <!-- Grille des images -->

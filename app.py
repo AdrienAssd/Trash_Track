@@ -359,5 +359,68 @@ def historique():
                          images_vide=images_vide,
                          filter_type=filter_type)
 
+@app.route('/clear_history')
+def clear_history():
+    """Supprimer complètement l'historique - toutes les images et données de la base"""
+    import shutil
+    
+    with sqlite3.connect('database.db') as conn:
+        cursor = conn.cursor()
+        
+        # Récupérer tous les chemins de fichiers avant suppression
+        cursor.execute('SELECT filepath, histogram_image, edge_image FROM images')
+        files_to_delete = cursor.fetchall()
+        
+        # Supprimer tous les fichiers physiques
+        for file_data in files_to_delete:
+            filepath, histogram_path, edge_path = file_data
+            
+            # Supprimer le fichier d'origine
+            if filepath and os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except OSError:
+                    pass
+            
+            # Supprimer le fichier histogramme
+            if histogram_path and os.path.exists(histogram_path):
+                try:
+                    os.remove(histogram_path)
+                except OSError:
+                    pass
+                    
+            # Supprimer le fichier de contours
+            if edge_path and os.path.exists(edge_path):
+                try:
+                    os.remove(edge_path)
+                except OSError:
+                    pass
+        
+        # Vider complètement la table images
+        cursor.execute('DELETE FROM images')
+        
+        # Réinitialiser l'auto-increment
+        cursor.execute('DELETE FROM sqlite_sequence WHERE name="images"')
+        
+        conn.commit()
+    
+    # Optionnel : nettoyer les dossiers vides
+    try:
+        # Nettoyer le dossier uploads/userImg s'il est vide
+        if os.path.exists(app.config['UPLOAD_FOLDER']) and not os.listdir(app.config['UPLOAD_FOLDER']):
+            pass  # Garder le dossier mais vide
+            
+        # Nettoyer le dossier histogrammes s'il est vide
+        if os.path.exists(HISTOGRAM_FOLDER) and not os.listdir(HISTOGRAM_FOLDER):
+            pass  # Garder le dossier mais vide
+            
+        # Nettoyer le dossier edges s'il est vide
+        if os.path.exists(EDGE_FOLDER) and not os.listdir(EDGE_FOLDER):
+            pass  # Garder le dossier mais vide
+    except:
+        pass
+    
+    return redirect(url_for('historique'))
+
 if __name__ == '__main__':
     app.run(debug=True)
