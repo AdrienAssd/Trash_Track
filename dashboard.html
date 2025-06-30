@@ -24,10 +24,10 @@
             </div>
             <nav class="nav">
                 <a href="/" class="nav-link">Accueil</a>
-                <a href="dashboard.html" class="nav-link">Dashboard</a>
-                <a href="apropos.html" class="nav-link">À propos</a>
+                <a href="/dashboard.html" class="nav-link">Dashboard</a>
+                <a href="/apropos.html" class="nav-link">À propos</a>
                 <a href="/historique" class="nav-link">Historique</a>
-                <a href="contact.html" class="nav-link">Contact</a>
+                <a href="/contact.html" class="nav-link">Contact</a>
             </nav>
         </div>
     </header>
@@ -50,9 +50,9 @@
                         </select>
                         <div class="date-range">
                             <label>Du:</label>
-                            <input type="date" class="date-input" id="startDate" value="2025-06-20">
+                            <input type="date" class="date-input" id="startDate" value="2025-06-01">
                             <label>Au:</label>
-                            <input type="date" class="date-input" id="endDate" value="2025-06-27">
+                            <input type="date" class="date-input" id="endDate" value="2025-12-31">
                         </div>
                     </div>
                     <div id="map"></div>
@@ -198,47 +198,64 @@
     </footer>
 
     <script>
-        // Données simulées enrichies pour le dashboard
-        const binData = {
-            empty: 16,
-            full: 8
-        };
+        // Variables globales pour stocker les données réelles
+        let dashboardData = null;
+        let binData = { empty: 0, full: 0 };
+        let uploadStats = {};
+        let fileSizeData = {};
+        let timelineData = {};
+        let riskZones = [];
+        let historyData = [];
 
-        const uploadStats = {
-            totalUploads: 312,
-            totalBins: 24,
-            avgFileSize: 2.4,
-            emptyPercentage: 67,
-            fullPercentage: 33
-        };
+        // Fonction pour charger les données depuis l'API
+        async function loadDashboardData() {
+            try {
+                const response = await fetch('/api/dashboard-data');
+                dashboardData = await response.json();
+                
+                // Mettre à jour les variables globales avec les vraies données
+                binData = {
+                    empty: dashboardData.stats.emptyCount,
+                    full: dashboardData.stats.fullCount
+                };
+                
+                uploadStats = dashboardData.stats;
+                fileSizeData = dashboardData.fileSizeData;
+                timelineData = dashboardData.timelineData;
+                riskZones = dashboardData.riskZones;
+                historyData = dashboardData.historyData;
+                
+                console.log('Données du dashboard chargées:', dashboardData);
+                return true;
+            } catch (error) {
+                console.error('Erreur lors du chargement des données:', error);
+                // Utiliser des données par défaut en cas d'erreur
+                initDefaultData();
+                return false;
+            }
+        }
 
-        const fileSizeData = {
-            ranges: ['< 1MB', '1-2MB', '2-3MB', '3-4MB', '> 4MB'],
-            counts: [45, 89, 112, 54, 12]
-        };
-
-        const timelineData = {
-            dates: ['2025-06-21', '2025-06-22', '2025-06-23', '2025-06-24', '2025-06-25', '2025-06-26', '2025-06-27'],
-            uploads: [28, 35, 42, 38, 45, 52, 48]
-        };
-
-        const riskZones = [
-            { location: "Paris 18e - Montmartre", level: "high", count: 8, lastUpdate: "2025-06-27 14:30" },
-            { location: "Paris 15e - Tour Eiffel", level: "medium", count: 5, lastUpdate: "2025-06-27 13:45" },
-            { location: "Paris 11e - République", level: "medium", count: 4, lastUpdate: "2025-06-27 12:20" },
-            { location: "Paris 16e - Trocadéro", level: "low", count: 2, lastUpdate: "2025-06-27 11:15" }
-        ];
-
-        const historyData = [
-            { filename: "poubelle_001.jpg", location: "Paris 15e", status: "empty", timestamp: "2025-06-27 14:30", lat: 48.8566, lng: 2.2908, fileSize: 2.1 },
-            { filename: "poubelle_002.jpg", location: "Paris 16e", status: "full", timestamp: "2025-06-27 14:15", lat: 48.8649, lng: 2.2767, fileSize: 3.2 },
-            { filename: "poubelle_003.jpg", location: "Paris 14e", status: "empty", timestamp: "2025-06-27 13:45", lat: 48.8323, lng: 2.3252, fileSize: 1.8 },
-            { filename: "poubelle_004.jpg", location: "Paris 17e", status: "full", timestamp: "2025-06-27 13:20", lat: 48.8866, lng: 2.3124, fileSize: 2.9 },
-            { filename: "poubelle_005.jpg", location: "Paris 12e", status: "empty", timestamp: "2025-06-27 12:55", lat: 48.8448, lng: 2.3746, fileSize: 1.5 },
-            { filename: "poubelle_006.jpg", location: "Paris 18e", status: "full", timestamp: "2025-06-27 12:30", lat: 48.8927, lng: 2.3347, fileSize: 4.1 },
-            { filename: "poubelle_007.jpg", location: "Paris 11e", status: "empty", timestamp: "2025-06-27 11:45", lat: 48.8566, lng: 2.3734, fileSize: 2.3 },
-            { filename: "poubelle_008.jpg", location: "Paris 13e", status: "empty", timestamp: "2025-06-27 11:20", lat: 48.8309, lng: 2.3534, fileSize: 1.9 }
-        ];
+        // Données par défaut en cas d'erreur de chargement
+        function initDefaultData() {
+            binData = { empty: 0, full: 0 };
+            uploadStats = {
+                totalUploads: 0,
+                totalBins: 0,
+                avgFileSize: 0,
+                emptyPercentage: 0,
+                fullPercentage: 0
+            };
+            fileSizeData = {
+                ranges: ['< 1MB', '1-2MB', '2-3MB', '3-4MB', '> 4MB'],
+                counts: [0, 0, 0, 0, 0]
+            };
+            timelineData = {
+                dates: [],
+                uploads: []
+            };
+            riskZones = [];
+            historyData = [];
+        }
 
         let currentMap;
         let currentMarkers = [];
@@ -274,6 +291,7 @@
             filteredData.forEach(item => {
                 const riskLevel = getRiskLevel(item.location);
                 
+                // Appliquer le filtre de zone à risque seulement si ce n'est pas "all"
                 if (locationFilter !== 'all' && !matchesRiskFilter(riskLevel, locationFilter)) {
                     return;
                 }
@@ -299,11 +317,13 @@
                     </div>
                 `);
             });
+            
+            console.log(`Marqueurs affichés: ${currentMarkers.length}/${filteredData.length}`);
         }
 
         // Obtenir le niveau de risque pour une localisation
         function getRiskLevel(location) {
-            const zone = riskZones.find(z => z.location.includes(location.replace('Paris ', '')));
+            const zone = riskZones.find(z => z.location === location);
             return zone ? zone.level : 'low';
         }
 
@@ -412,6 +432,9 @@
         function generateRiskZones() {
             const riskZonesList = document.getElementById('riskZonesList');
             
+            // Vider les anciennes zones à risque
+            riskZonesList.innerHTML = '';
+            
             riskZones.forEach(zone => {
                 const riskItem = document.createElement('div');
                 riskItem.className = `risk-zone-item risk-zone-${zone.level}`;
@@ -436,11 +459,20 @@
             
             historyList.innerHTML = '';
             
+            // Si pas de données, afficher un message
+            if (!historyData || historyData.length === 0) {
+                historyList.innerHTML = '<div class="history-item"><div class="history-info">Aucune donnée disponible</div></div>';
+                return;
+            }
+            
             let filteredHistory = historyData.filter(item => {
                 const statusMatch = statusFilter === 'all' || item.status === statusFilter;
                 const locationMatch = locationFilter === 'all' || item.location === locationFilter;
                 return statusMatch && locationMatch;
             });
+            
+            // Mettre à jour les options de localisation basées sur les vraies données
+            updateLocationOptions();
             
             filteredHistory.forEach(item => {
                 const historyItem = document.createElement('div');
@@ -458,13 +490,36 @@
             });
         }
 
+        // Mettre à jour les options de localisation dans le filtre
+        function updateLocationOptions() {
+            const locationSelect = document.getElementById('locationHistoryFilter');
+            const currentValue = locationSelect.value;
+            
+            // Récupérer toutes les localisations uniques des vraies données
+            const locations = [...new Set(historyData.map(item => item.location))];
+            
+            // Vider et repeupler les options
+            locationSelect.innerHTML = '<option value="all">Toutes les locations</option>';
+            locations.forEach(location => {
+                const option = document.createElement('option');
+                option.value = location;
+                option.textContent = location;
+                locationSelect.appendChild(option);
+            });
+            
+            // Restaurer la valeur sélectionnée si elle existe toujours
+            if (locations.includes(currentValue)) {
+                locationSelect.value = currentValue;
+            }
+        }
+
         // Mise à jour des statistiques
         function updateStats() {
-            document.getElementById('total-uploads').textContent = uploadStats.totalUploads;
-            document.getElementById('total-bins').textContent = uploadStats.totalBins;
-            document.getElementById('avg-file-size').textContent = uploadStats.avgFileSize + ' MB';
-            document.getElementById('empty-percentage').textContent = uploadStats.emptyPercentage + '%';
-            document.getElementById('full-percentage').textContent = uploadStats.fullPercentage + '%';
+            document.getElementById('total-uploads').textContent = uploadStats.totalUploads || 0;
+            document.getElementById('total-bins').textContent = uploadStats.totalBins || 0;
+            document.getElementById('avg-file-size').textContent = (uploadStats.avgFileSize || 0) + ' MB';
+            document.getElementById('empty-percentage').textContent = (uploadStats.emptyPercentage || 0) + '%';
+            document.getElementById('full-percentage').textContent = (uploadStats.fullPercentage || 0) + '%';
         }
 
         // Gestionnaires d'événements pour les filtres
@@ -477,7 +532,11 @@
         }
 
         // Initialisation au chargement de la page
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Charger les données réelles depuis l'API
+            await loadDashboardData();
+            
+            // Initialiser tous les composants avec les vraies données
             initMap();
             initChart();
             initFileSizeChart();
@@ -487,13 +546,6 @@
             updateStats();
             setupEventListeners();
         });
-
-        // Simulation de mises à jour en temps réel
-        setInterval(() => {
-            console.log('Vérification des nouvelles données...');
-            // Ici vous pourriez ajouter du code pour mettre à jour les données depuis une API
-            // Par exemple: fetchLatestData().then(updateDashboard);
-        }, 30000); // Toutes les 30 secondes
     </script>
 </body>
 </html>
