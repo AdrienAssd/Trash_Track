@@ -12,7 +12,7 @@ import logging
 import matplotlib
 import cv2
 import subprocess
-import tensorflow as tf
+from skimage.measure import shannon_entropy
 
 # Forcer Matplotlib à utiliser un backend non interactif
 matplotlib.use('Agg')
@@ -126,22 +126,86 @@ def detect_edges(filepath):
         cv2.imwrite(edge_path, edges)
         return edge_path.replace('\\', '/')
 
-# Charger le modèle une seule fois au démarrage
-model = tf.keras.models.load_model("model_trash_classifier.h5")
+# Nouvelle fonction de classification basée sur des règles heuristiques
 
-# Fonction pour prédire la catégorie d'une image
-def predict_image_category(filepath):
-    from tensorflow.keras.preprocessing import image
-    from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+def is_poubelle_pleine_v3(image_path):
+    """
+    Détermine si une poubelle est pleine (dirty) ou vide (clean) à partir de règles heuristiques pondérées.
+    """
+    img_color = cv2.imread(image_path)
+    if img_color is None:
+        logging.warning(f"Image introuvable : {image_path}")
+        return "clean"  # Défaut
 
-    img = image.load_img(filepath, target_size=(224, 224))
-    img_array = image.img_to_array(img)
-    img_array = preprocess_input(img_array)
-    img_array = np.expand_dims(img_array, axis=0)
+    img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
+    img_gray = cv2.GaussianBlur(img_gray, (5, 5), 0)
 
-    pred = model.predict(img_array)[0][0]
-    label = "dirty" if pred > 0.5 else "clean"
-    return label
+    # Contours
+    edges = cv2.Canny(img_gray, 50, 150)
+    white_density = cv2.countNonZero(edges) / edges.size
+
+    # Contours irréguliers
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    irregular = 0
+    for c in contours:
+        area = cv2.contourArea(c)
+        if area < 200:
+            continue
+        perimeter = cv2.arcLength(c, True)
+        if perimeter == 0:
+            continue
+        circularity = 4 * np.pi * (area / (perimeter ** 2))
+        if circularity < 0.5:
+            irregular += 1
+
+    # Saturation et luminance
+    hsv = cv2.cvtColor(img_color, cv2.COLOR_BGR2HSV)
+    mean_saturation = np.mean(hsv[:, :, 1])
+    mean_value = np.mean(hsv[:, :, 2])
+
+    # Analyse par blocs (3x3)
+    h, w = edges.shape
+    block_alerts = 0
+    for i in range(3):
+        for j in range(3):
+            roi = edges[i*h//3:(i+1)*h//3, j*w//3:(j+1)*w//3]
+            density = cv2.countNonZero(roi) / roi.size
+            if density > 0.07:
+                block_alerts += 1
+
+    # Texture (entropie)
+    entropy = shannon_entropy(img_gray)
+
+    # Calcul du score pondéré
+    score = 0
+    if white_density > 0.06:
+        score += 1
+    if irregular >= 25:
+        score += 2
+    if mean_saturation > 45:
+        score += 1
+    if block_alerts >= 4:
+        score += 1
+    if entropy > 6.5:
+        score += 1
+
+    # Cas particulier : ombre probable
+    if irregular == 0 and white_density > 0.08 and mean_value < 50:
+        return "clean"
+
+    logging.debug(f"Image: {image_path}")
+    logging.debug(f"  ➤ Densité de blancs : {white_density:.2%}")
+    logging.debug(f"  ➤ Contours irréguliers : {irregular}")
+    logging.debug(f"  ➤ Saturation moyenne : {mean_saturation:.2f}")
+    logging.debug(f"  ➤ Luminosité moyenne : {mean_value:.2f}")
+    logging.debug(f"  ➤ Blocs d'alerte : {block_alerts}")
+    logging.debug(f"  ➤ Entropie : {entropy:.2f}")
+    logging.debug(f"  ➤ Score final : {score}")
+
+    return "dirty" if score >= 4 else "clean"
+
+# Remplacement de la fonction predict_image_category
+predict_image_category = is_poubelle_pleine_v3
 
 def generate_random_paris_coordinates(seed_id):
     """
