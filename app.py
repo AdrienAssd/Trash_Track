@@ -1,9 +1,10 @@
 import json
 import os
 import sqlite3
+import random
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory
 from werkzeug.utils import secure_filename
-from datetime import datetime
+from datetime import datetime, timedelta
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
@@ -141,6 +142,59 @@ def predict_image_category(filepath):
     pred = model.predict(img_array)[0][0]
     label = "dirty" if pred > 0.5 else "clean"
     return label
+
+def generate_random_paris_coordinates(seed_id):
+    """
+    Génère des coordonnées GPS fixes dans la zone de Paris basées sur un ID
+    Les coordonnées seront toujours les mêmes pour le même ID
+    Paris est approximativement dans ces limites :
+    - Latitude: 48.815 à 48.902
+    - Longitude: 2.225 à 2.470
+    """
+    # Utiliser l'ID comme seed pour avoir des coordonnées fixes
+    random.seed(seed_id)
+    
+    # Limites approximatives de Paris
+    lat_min, lat_max = 48.815, 48.902
+    lng_min, lng_max = 2.225, 2.470
+    
+    # Générer des coordonnées aléatoires basées sur le seed
+    latitude = random.uniform(lat_min, lat_max)
+    longitude = random.uniform(lng_min, lng_max)
+    
+    # Remettre le seed à None pour ne pas affecter d'autres générations aléatoires
+    random.seed()
+    
+    return round(latitude, 6), round(longitude, 6)
+
+def get_paris_district_from_coordinates(lat, lng):
+    """
+    Détermine un arrondissement approximatif basé sur les coordonnées
+    (Simulation simplifiée)
+    """
+    # Centres approximatifs de quelques arrondissements
+    districts = [
+        {"name": "Paris 1er", "center": (48.8606, 2.3376)},
+        {"name": "Paris 4e", "center": (48.8566, 2.3522)},
+        {"name": "Paris 7e", "center": (48.8566, 2.3118)},
+        {"name": "Paris 11e", "center": (48.8566, 2.3734)},
+        {"name": "Paris 15e", "center": (48.8422, 2.2956)},
+        {"name": "Paris 16e", "center": (48.8649, 2.2767)},
+        {"name": "Paris 18e", "center": (48.8927, 2.3347)},
+        {"name": "Paris 20e", "center": (48.8663, 2.3969)}
+    ]
+    
+    # Trouver le district le plus proche
+    min_distance = float('inf')
+    closest_district = "Paris Centre"
+    
+    for district in districts:
+        distance = ((lat - district["center"][0])**2 + (lng - district["center"][1])**2)**0.5
+        if distance < min_distance:
+            min_distance = distance
+            closest_district = district["name"]
+    
+    return closest_district
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -297,6 +351,155 @@ def contact():
 @app.route('/dashboard.html')
 def dashboard():
     return send_from_directory('.', 'dashboard.html')
+
+@app.route('/api/dashboard-data')
+def dashboard_data():
+    with sqlite3.connect('database.db') as conn:
+        cursor = conn.cursor()
+        
+        # Récupérer toutes les images avec leurs métadonnées
+        cursor.execute("""
+            SELECT id, filepath, upload_date, annotation, filesize, width, height,
+                   avg_color_r, avg_color_g, avg_color_b, contrast, histogram_data
+            FROM images ORDER BY upload_date DESC
+        """)
+        images = cursor.fetchall()
+        
+        # Calculer les statistiques
+        total_images = len(images)
+        full_count = sum(1 for img in images if img[3] == 'pleine')
+        empty_count = total_images - full_count
+        
+        # Calculer la taille moyenne des fichiers
+        avg_file_size = sum(img[4] for img in images) / total_images if total_images > 0 else 0
+        avg_file_size_mb = avg_file_size / (1024 * 1024)  # Convertir en MB
+        
+        # Calculer les pourcentages
+        empty_percentage = round((empty_count / total_images) * 100) if total_images > 0 else 0
+        full_percentage = round((full_count / total_images) * 100) if total_images > 0 else 0
+        
+        # Préparer les données pour les graphiques de taille de fichier
+        file_size_ranges = {
+            '< 1MB': 0,
+            '1-2MB': 0,
+            '2-3MB': 0,
+            '3-4MB': 0,
+            '> 4MB': 0
+        }
+        
+        for img in images:
+            size_mb = img[4] / (1024 * 1024)
+            if size_mb < 1:
+                file_size_ranges['< 1MB'] += 1
+            elif size_mb < 2:
+                file_size_ranges['1-2MB'] += 1
+            elif size_mb < 3:
+                file_size_ranges['2-3MB'] += 1
+            elif size_mb < 4:
+                file_size_ranges['3-4MB'] += 1
+            else:
+                file_size_ranges['> 4MB'] += 1
+        
+        # Données temporelles (uploads par jour des 7 derniers jours)
+        timeline_data = {}
+        end_date = datetime.now()
+        for i in range(7):
+            date = end_date - timedelta(days=i)
+            date_str = date.strftime('%Y-%m-%d')
+            timeline_data[date_str] = 0
+        
+        for img in images:
+            upload_date = img[2].split(' ')[0]  # Extraire juste la date
+            if upload_date in timeline_data:
+                timeline_data[upload_date] += 1
+        
+        # Préparer l'historique des images avec coordonnées GPS fixes
+        history_data = []
+        for img in images:
+            # Générer des coordonnées GPS fixes basées sur l'ID de l'image
+            latitude, longitude = generate_random_paris_coordinates(img[0])
+            
+            # Déterminer l'arrondissement basé sur les coordonnées générées
+            location = get_paris_district_from_coordinates(latitude, longitude)
+            
+            history_data.append({
+                'id': img[0],
+                'filename': os.path.basename(img[1]),
+                'location': location,
+                'status': 'full' if img[3] == 'pleine' else 'empty',
+                'timestamp': img[2],
+                'fileSize': round(img[4] / (1024 * 1024), 2),  # Convertir en MB
+                'lat': latitude,
+                'lng': longitude
+            })
+        
+        # Générer les zones à risque basées sur les vraies données
+        location_stats = {}
+        for img in images:
+            # Générer les coordonnées et l'arrondissement pour chaque image
+            latitude, longitude = generate_random_paris_coordinates(img[0])
+            location = get_paris_district_from_coordinates(latitude, longitude)
+            status = 'full' if img[3] == 'pleine' else 'empty'
+            
+            if location not in location_stats:
+                location_stats[location] = {'full': 0, 'empty': 0, 'total': 0}
+            
+            location_stats[location][status] += 1
+            location_stats[location]['total'] += 1
+        
+        # Créer les zones à risque basées sur le pourcentage de poubelles pleines
+        risk_zones = []
+        for location, stats in location_stats.items():
+            if stats['total'] > 0:
+                local_full_percentage = (stats['full'] / stats['total']) * 100
+                
+                # Déterminer le niveau de risque
+                if local_full_percentage >= 70:
+                    level = 'high'
+                elif local_full_percentage >= 40:
+                    level = 'medium'
+                else:
+                    level = 'low'
+                
+                risk_zones.append({
+                    'location': location,
+                    'level': level,
+                    'count': stats['full'],
+                    'lastUpdate': datetime.now().strftime('%Y-%m-%d %H:%M')
+                })
+        
+        # Si aucune zone à risque, ajouter une zone par défaut
+        if not risk_zones:
+            risk_zones = [
+                {
+                    'location': 'Zone Centre',
+                    'level': 'low',
+                    'count': 0,
+                    'lastUpdate': datetime.now().strftime('%Y-%m-%d %H:%M')
+                }
+            ]
+        
+        return {
+            'stats': {
+                'totalUploads': total_images,
+                'totalBins': total_images,  # Pour l'instant, considérons chaque image comme une poubelle unique
+                'avgFileSize': round(avg_file_size_mb, 2),
+                'emptyPercentage': empty_percentage,
+                'fullPercentage': full_percentage,
+                'emptyCount': empty_count,
+                'fullCount': full_count
+            },
+            'fileSizeData': {
+                'ranges': list(file_size_ranges.keys()),
+                'counts': list(file_size_ranges.values())
+            },
+            'timelineData': {
+                'dates': sorted(timeline_data.keys()),
+                'uploads': [timeline_data[date] for date in sorted(timeline_data.keys())]
+            },
+            'historyData': history_data[:50],  # Limiter aux 50 dernières images
+            'riskZones': risk_zones
+        }
 
 @app.route('/historique')
 def historique():
