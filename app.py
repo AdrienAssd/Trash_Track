@@ -6,6 +6,7 @@ from flask import Flask, request, render_template, redirect, url_for, send_from_
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from PIL import Image
+from PIL.ExifTags import TAGS, GPSTAGS
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
@@ -13,6 +14,7 @@ import matplotlib
 import cv2
 import subprocess
 import tensorflow as tf
+import exifread
 
 # Forcer Matplotlib à utiliser un backend non interactif
 matplotlib.use('Agg')
@@ -65,6 +67,18 @@ def init_db():
             pass
         try:
             cursor.execute("ALTER TABLE images ADD COLUMN edge_image TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE images ADD COLUMN exif_date_taken TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE images ADD COLUMN exif_latitude REAL")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE images ADD COLUMN exif_longitude REAL")
         except sqlite3.OperationalError:
             pass
         conn.commit()
@@ -322,7 +336,12 @@ def get_paris_district_from_coordinates(lat, lng):
     """
     Détermine un arrondissement approximatif basé sur les coordonnées
     Utilise les mêmes points de référence que generate_random_paris_coordinates_safe
+    Si les coordonnées sont en dehors de Paris, retourne "En dehors de Paris"
     """
+    # Vérifier d'abord si les coordonnées sont dans Paris
+    if not is_in_paris_bounds(lat, lng):
+        return "En dehors de Paris"
+    
     # Centres de référence pour chaque arrondissement (mêmes que les coordonnées générées)
     districts = [
         {"name": "Paris 1er", "center": (48.8606, 2.3376)},  # Louvre
@@ -392,6 +411,15 @@ def home():
             label = predict_image_category(filepath)
             annotation = "pleine" if label == "dirty" else "vide"
 
+            # Extraire les métadonnées EXIF
+            exif_metadata = extract_exif_metadata(filepath)
+            
+            # Déterminer la date à utiliser (EXIF ou système)
+            if exif_metadata['date_taken']:
+                upload_date = exif_metadata['date_taken'].strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                upload_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
             # Ajouter l'annotation prédite dans la base de données
             with sqlite3.connect('database.db') as conn:
                 cursor = conn.cursor()
@@ -399,12 +427,13 @@ def home():
                     INSERT INTO images (
                         filepath, upload_date, annotation, filesize, width, height,
                         avg_color_r, avg_color_g, avg_color_b, contrast,
-                        histogram_data, histogram_image, edge_image
+                        histogram_data, histogram_image, edge_image,
+                        exif_date_taken, exif_latitude, exif_longitude
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     web_filepath,  # Utiliser le chemin web normalisé
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    upload_date,
                     annotation,  # Annotation prédite
                     features['filesize'],
                     features['width'],
@@ -415,21 +444,35 @@ def home():
                     features['contrast'],
                     histogram_data,
                     web_plot_path,  # Utiliser le chemin web normalisé
-                    web_edge_path   # Utiliser le chemin web normalisé
+                    web_edge_path,   # Utiliser le chemin web normalisé
+                    exif_metadata['date_taken'].strftime('%Y-%m-%d %H:%M:%S') if exif_metadata['date_taken'] else None,
+                    exif_metadata['latitude'],
+                    exif_metadata['longitude']
                 ))
                 conn.commit()
             return redirect(url_for('home'))
 
     # Récupérer la dernière image uploadée pour l'affichage
     with sqlite3.connect('database.db') as conn:
-        latest_image = conn.execute("SELECT id, filepath, upload_date, annotation, filesize, width, height, avg_color_r, avg_color_g, avg_color_b, contrast, histogram_data, histogram_image, edge_image FROM images ORDER BY id DESC LIMIT 1").fetchone()
+        latest_image = conn.execute("""
+            SELECT id, filepath, upload_date, annotation, filesize, width, height, 
+                   avg_color_r, avg_color_g, avg_color_b, contrast, histogram_data, 
+                   histogram_image, edge_image, exif_date_taken, exif_latitude, exif_longitude 
+            FROM images ORDER BY id DESC LIMIT 1
+        """).fetchone()
 
     latest_image_data = None
     if latest_image:
         img = latest_image
         
-        # Générer les coordonnées GPS et l'arrondissement pour cette image
-        latitude, longitude = generate_random_paris_coordinates_safe(img[0])
+        # Utiliser les coordonnées EXIF si disponibles, sinon générer aléatoirement
+        if img[15] is not None and img[16] is not None:  # exif_latitude, exif_longitude
+            latitude, longitude = img[15], img[16]
+            # Utiliser les vraies coordonnées EXIF même si en dehors de Paris
+        else:
+            # Générer des coordonnées dans Paris seulement si pas de données EXIF
+            latitude, longitude = generate_random_paris_coordinates_safe(img[0])
+        
         arrondissement = get_paris_district_from_coordinates(latitude, longitude)
         
         latest_image_data = {
@@ -447,7 +490,12 @@ def home():
             'histogram_data': img[11],
             'histogram_image': img[12],
             'edge_image': img[13],
-            'arrondissement': arrondissement
+            'arrondissement': arrondissement,
+            'exif_date_taken': img[14],
+            'latitude': latitude,
+            'longitude': longitude,
+            'has_exif_location': img[15] is not None and img[16] is not None,
+            'has_exif_date': img[14] is not None
         }
 
     return render_template('index.html', latest_image=latest_image_data)
@@ -529,7 +577,8 @@ def dashboard_data():
         # Récupérer toutes les images avec leurs métadonnées
         cursor.execute("""
             SELECT id, filepath, upload_date, annotation, filesize, width, height,
-                   avg_color_r, avg_color_g, avg_color_b, contrast, histogram_data
+                   avg_color_r, avg_color_g, avg_color_b, contrast, histogram_data,
+                   exif_date_taken, exif_latitude, exif_longitude
             FROM images ORDER BY upload_date DESC
         """)
         images = cursor.fetchall()
@@ -585,7 +634,12 @@ def dashboard_data():
         
         # Compter les images par jour et par statut
         for img in images:
-            upload_date = img[2].split(' ')[0]  # Extraire juste la date
+            # Utiliser la date EXIF si disponible, sinon la date d'upload
+            if img[12] is not None:  # exif_date_taken
+                upload_date = img[12].split(' ')[0]  # Extraire juste la date EXIF
+            else:
+                upload_date = img[2].split(' ')[0]  # Extraire juste la date d'upload
+                
             if upload_date in timeline_data:
                 timeline_data[upload_date] += 1
                 
@@ -595,31 +649,50 @@ def dashboard_data():
                 elif img[3] == 'vide':
                     timeline_empty[upload_date] += 1
         
-        # Préparer l'historique des images avec coordonnées GPS fixes
+        # Préparer l'historique des images avec coordonnées GPS (EXIF ou générées)
         history_data = []
         for img in images:
-            # Générer des coordonnées GPS fixes basées sur l'ID de l'image (dans Paris intra-muros)
-            latitude, longitude = generate_random_paris_coordinates_safe(img[0])
+            # Utiliser les coordonnées EXIF si disponibles, sinon générer dans Paris
+            if img[13] is not None and img[14] is not None:  # exif_latitude, exif_longitude
+                latitude, longitude = img[13], img[14]
+                # Utiliser les vraies coordonnées EXIF même si en dehors de Paris
+            else:
+                # Générer des coordonnées dans Paris seulement si pas de données EXIF
+                latitude, longitude = generate_random_paris_coordinates_safe(img[0])
             
-            # Déterminer l'arrondissement basé sur les coordonnées générées
+            # Déterminer l'arrondissement basé sur les coordonnées utilisées
             location = get_paris_district_from_coordinates(latitude, longitude)
+            
+            # Utiliser la date EXIF si disponible, sinon la date d'upload
+            if img[12] is not None:  # exif_date_taken
+                display_date = img[12]
+            else:
+                display_date = img[2]
             
             history_data.append({
                 'id': img[0],
                 'filename': os.path.basename(img[1]),
                 'location': location,
                 'status': 'full' if img[3] == 'pleine' else 'empty',
-                'timestamp': img[2],
+                'timestamp': display_date,
                 'fileSize': round(img[4] / (1024 * 1024), 2),  # Convertir en MB
                 'lat': latitude,
-                'lng': longitude
+                'lng': longitude,
+                'has_exif_location': img[13] is not None and img[14] is not None,
+                'has_exif_date': img[12] is not None
             })
         
         # Générer les zones à risque basées sur les vraies données
         location_stats = {}
         for img in images:
-            # Générer les coordonnées et l'arrondissement pour chaque image (dans Paris intra-muros)
-            latitude, longitude = generate_random_paris_coordinates_safe(img[0])
+            # Utiliser les coordonnées EXIF si disponibles, sinon générer dans Paris
+            if img[13] is not None and img[14] is not None:  # exif_latitude, exif_longitude
+                latitude, longitude = img[13], img[14]
+                # Utiliser les vraies coordonnées EXIF même si en dehors de Paris
+            else:
+                # Générer des coordonnées dans Paris seulement si pas de données EXIF
+                latitude, longitude = generate_random_paris_coordinates_safe(img[0])
+                
             location = get_paris_district_from_coordinates(latitude, longitude)
             status = 'full' if img[3] == 'pleine' else 'empty'
             
@@ -731,7 +804,12 @@ def historique():
                 
                 # Ajouter l'arrondissement calculé et filtrer
                 for image in batch_images:
-                    latitude, longitude = generate_random_paris_coordinates_safe(image['id'])
+                    # Utiliser les coordonnées EXIF si disponibles, sinon générer dans Paris
+                    if image['exif_latitude'] is not None and image['exif_longitude'] is not None:
+                        latitude, longitude = image['exif_latitude'], image['exif_longitude']
+                    else:
+                        latitude, longitude = generate_random_paris_coordinates_safe(image['id'])
+                    
                     image['arrondissement'] = get_paris_district_from_coordinates(latitude, longitude)
                     
                     # Ajouter seulement si correspond au filtre arrondissement
@@ -792,20 +870,28 @@ def historique():
         images_vide = cursor.fetchone()[0]
         
         # Récupérer tous les arrondissements disponibles pour le dropdown
-        cursor.execute('SELECT id FROM images ORDER BY id')
-        all_image_ids = [row[0] for row in cursor.fetchall()]
+        cursor.execute('SELECT id, exif_latitude, exif_longitude FROM images ORDER BY id')
+        all_image_data = cursor.fetchall()
         
-        # Calculer les arrondissements uniques
+        # Calculer les arrondissements uniques avec les métadonnées EXIF
         arrondissements = set()
-        for img_id in all_image_ids:
-            lat, lng = generate_random_paris_coordinates_safe(img_id)
-            arr = get_paris_district_from_coordinates(lat, lng)
+        for img_id, exif_lat, exif_lng in all_image_data:
+            # Utiliser les coordonnées EXIF si disponibles, sinon générer
+            if exif_lat is not None and exif_lng is not None:
+                latitude, longitude = exif_lat, exif_lng
+            else:
+                latitude, longitude = generate_random_paris_coordinates_safe(img_id)
+            
+            arr = get_paris_district_from_coordinates(latitude, longitude)
             arrondissements.add(arr)
         
         arrondissements = sorted(list(arrondissements))
         
-        # Formater les dates et tailles de fichiers
+        # Formater les dates et tailles de fichiers, et ajouter les coordonnées EXIF
         for image in images:
+            # Ajouter les coordonnées et arrondissement en utilisant EXIF si disponible
+            image = extract_exif_coordinates_and_arrondissement(image)
+            
             if image['upload_date']:
                 try:
                     # Convertir la date en format plus lisible
@@ -891,7 +977,12 @@ def load_more_images():
                 
                 # Ajouter l'arrondissement calculé et filtrer
                 for image in batch_images:
-                    latitude, longitude = generate_random_paris_coordinates_safe(image['id'])
+                    # Utiliser les coordonnées EXIF si disponibles, sinon générer dans Paris
+                    if image['exif_latitude'] is not None and image['exif_longitude'] is not None:
+                        latitude, longitude = image['exif_latitude'], image['exif_longitude']
+                    else:
+                        latitude, longitude = generate_random_paris_coordinates_safe(image['id'])
+                    
                     image['arrondissement'] = get_paris_district_from_coordinates(latitude, longitude)
                     
                     # Ajouter seulement si correspond au filtre arrondissement
@@ -938,8 +1029,11 @@ def load_more_images():
         if arrondissement_filter:
             total_filtered_images = max(1, total_filtered_images // 20)
         
-        # Formater les dates et tailles de fichiers
+        # Formater les dates et tailles de fichiers, et ajouter les coordonnées EXIF
         for image in images:
+            # Ajouter les coordonnées et arrondissement en utilisant EXIF si disponible
+            image = extract_exif_coordinates_and_arrondissement(image)
+            
             if image['upload_date']:
                 try:
                     # Convertir la date en format plus lisible
@@ -1051,6 +1145,93 @@ def clear_history():
 # 5. RÉPARTITION OPTIMALE : Le 15e (plus grand) a 16x16 cellules,
 #    le 2e (plus petit) a 6x6 cellules, etc.
 # ================================================================
+
+def extract_exif_metadata(filepath):
+    """
+    Extrait les métadonnées EXIF d'une image (date et géolocalisation)
+    Retourne un dictionnaire avec date_taken, latitude, longitude (ou None si absent)
+    """
+    try:
+        # Méthode 1: Utiliser exifread pour la géolocalisation
+        with open(filepath, 'rb') as f:
+            tags = exifread.process_file(f)
+        
+        # Méthode 2: Utiliser PIL pour la date et vérifier les données GPS
+        image = Image.open(filepath)
+        exif_data = image._getexif()
+        
+        metadata = {
+            'date_taken': None,
+            'latitude': None,
+            'longitude': None
+        }
+        
+        # Extraction de la date avec PIL
+        if exif_data:
+            for tag_id, value in exif_data.items():
+                tag = TAGS.get(tag_id, tag_id)
+                if tag == 'DateTime' or tag == 'DateTimeOriginal':
+                    try:
+                        # Format EXIF: 'YYYY:MM:DD HH:MM:SS'
+                        metadata['date_taken'] = datetime.strptime(str(value), '%Y:%m:%d %H:%M:%S')
+                        break
+                    except ValueError:
+                        continue
+        
+        # Extraction de la géolocalisation avec exifread
+        gps_latitude = tags.get('GPS GPSLatitude')
+        gps_latitude_ref = tags.get('GPS GPSLatitudeRef')
+        gps_longitude = tags.get('GPS GPSLongitude')
+        gps_longitude_ref = tags.get('GPS GPSLongitudeRef')
+        
+        if gps_latitude and gps_longitude and gps_latitude_ref and gps_longitude_ref:
+            def convert_to_degrees(value):
+                """Convertit les coordonnées DMS (Degrees Minutes Seconds) en degrés décimaux"""
+                d, m, s = value.values
+                return float(d) + float(m)/60 + float(s)/3600
+            
+            lat = convert_to_degrees(gps_latitude)
+            lng = convert_to_degrees(gps_longitude)
+            
+            # Appliquer la référence (N/S pour latitude, E/W pour longitude)
+            if gps_latitude_ref.values[0] == 'S':
+                lat = -lat
+            if gps_longitude_ref.values[0] == 'W':
+                lng = -lng
+            
+            metadata['latitude'] = round(lat, 6)
+            metadata['longitude'] = round(lng, 6)
+        
+        return metadata
+        
+    except Exception as e:
+        logging.debug(f"Erreur lors de l'extraction EXIF pour {filepath}: {e}")
+        return {
+            'date_taken': None,
+            'latitude': None,
+            'longitude': None
+        }
+
+def extract_exif_coordinates_and_arrondissement(image):
+    """Helper pour extraire coordonnées et arrondissement en tenant compte des métadonnées EXIF"""
+    # Utiliser les coordonnées EXIF si disponibles, sinon générer dans Paris
+    if 'exif_latitude' in image and 'exif_longitude' in image and image['exif_latitude'] is not None and image['exif_longitude'] is not None:
+        latitude, longitude = image['exif_latitude'], image['exif_longitude']
+        # Utiliser les vraies coordonnées EXIF même si en dehors de Paris
+    else:
+        # Générer des coordonnées dans Paris seulement si pas de données EXIF
+        latitude, longitude = generate_random_paris_coordinates_safe(image['id'])
+    
+    arrondissement = get_paris_district_from_coordinates(latitude, longitude)
+    
+    # Enrichir l'objet image
+    image['arrondissement'] = arrondissement
+    image['latitude'] = latitude
+    image['longitude'] = longitude
+    image['has_exif_location'] = 'exif_latitude' in image and image['exif_latitude'] is not None
+    image['has_exif_date'] = 'exif_date_taken' in image and image['exif_date_taken'] is not None
+    
+    return image
 
 if __name__ == '__main__':
     app.run(debug=True)
