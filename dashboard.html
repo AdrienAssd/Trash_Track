@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport">
     <title>Dashboard - TrashTrack</title>
     <link rel="stylesheet" href="styles.css">
     <!-- Leaflet CSS -->
@@ -81,16 +81,9 @@
                             <span class="stat-number" id="avg-file-size">2.4 MB</span>
                             <div class="stat-label">Taille Moyenne</div>
                         </div>
-                    </div>
-                    
-                    <div class="percentage-display">
-                        <div class="percentage-item">
-                            <span class="percentage-value percentage-empty" id="empty-percentage">67%</span>
-                            <div class="stat-label">Vides</div>
-                        </div>
-                        <div class="percentage-item">
-                            <span class="percentage-value percentage-full" id="full-percentage">33%</span>
-                            <div class="stat-label">Pleines</div>
+                        <div class="stat-item">
+                            <span class="stat-number percentage-mixed" id="combined-percentage">67% / 33%</span>
+                            <div class="stat-label">Vides / Pleines</div>
                         </div>
                     </div>
                     
@@ -104,18 +97,8 @@
             <div class="analytics-grid">
                 <div class="dashboard-card">
                     <h2 class="card-title">
-                        <span class="card-icon">📈</span>
-                        Distribution des Tailles de Fichiers
-                    </h2>
-                    <div class="chart-container file-size-chart">
-                        <canvas id="fileSizeChart"></canvas>
-                    </div>
-                </div>
-                
-                <div class="dashboard-card">
-                    <h2 class="card-title">
-                        <span class="card-icon">📅</span>
-                        Évolution Temporelle
+                        <span class="card-icon">⌛</span>
+                        Évolution Temporelle des Poubelles
                     </h2>
                     <div class="chart-container file-size-chart">
                         <canvas id="timelineChart"></canvas>
@@ -222,6 +205,7 @@
                 uploadStats = dashboardData.stats;
                 fileSizeData = dashboardData.fileSizeData;
                 timelineData = dashboardData.timelineData;
+                
                 riskZones = dashboardData.riskZones;
                 historyData = dashboardData.historyData;
                 
@@ -251,7 +235,9 @@
             };
             timelineData = {
                 dates: [],
-                uploads: []
+                uploads: [],
+                emptyUploads: [],
+                fullUploads: []
             };
             riskZones = [];
             historyData = [];
@@ -259,6 +245,8 @@
 
         let currentMap;
         let currentMarkers = [];
+        let currentTimelineChart = null;
+        let currentBinChart = null;
 
         // Initialisation de la carte avec zones à risque
         function initMap() {
@@ -296,11 +284,81 @@
                     return;
                 }
 
+                // Définir les couleurs et styles selon le statut (poubelle reste blanche)
+                let backgroundColor = '';
+                let borderColor = '';
+                let shadowColor = '';
+                let glowColor = '';
+                
+                if (item.status === 'full') {
+                    // Rouge pour les poubelles pleines (fond seulement)
+                    backgroundColor = 'linear-gradient(135deg, rgba(244, 67, 54, 0.25) 0%, rgba(244, 67, 54, 0.15) 100%)';
+                    borderColor = '#f44336';
+                    shadowColor = 'rgba(244, 67, 54, 0.5)';
+                    glowColor = 'rgba(244, 67, 54, 0.3)';
+                } else {
+                    // Vert pour les poubelles vides (fond seulement)
+                    backgroundColor = 'linear-gradient(135deg, rgba(76, 175, 80, 0.25) 0%, rgba(76, 175, 80, 0.15) 100%)';
+                    borderColor = '#4CAF50';
+                    shadowColor = 'rgba(76, 175, 80, 0.5)';
+                    glowColor = 'rgba(76, 175, 80, 0.3)';
+                }
+                
                 const icon = L.divIcon({
-                    className: 'custom-marker',
-                    html: item.status === 'full' ? '🗑️' : '♻️',
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15]
+                    className: 'custom-marker-container',
+                    html: `
+                        <div class="marker-wrapper" style="
+                            width: 46px; 
+                            height: 46px; 
+                            background: ${backgroundColor}; 
+                            border: 3px solid ${borderColor}; 
+                            border-radius: 50%; 
+                            display: flex; 
+                            align-items: center; 
+                            justify-content: center;
+                            box-shadow: 
+                                0 8px 25px ${shadowColor}, 
+                                0 4px 10px rgba(0,0,0,0.15),
+                                inset 0 1px 3px rgba(255,255,255,0.3),
+                                0 0 0 4px ${glowColor};
+                            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                            backdrop-filter: blur(6px);
+                            position: relative;
+                            overflow: visible;
+                        ">
+                            <div class="marker-inner" style="
+                                width: 32px;
+                                height: 32px;
+                                background: rgba(255, 255, 255, 0.95);
+                                border-radius: 50%;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+                            ">
+                                <img src="static/images/poubelle-de-recyclage.png" 
+                                     style="
+                                         width: 22px; 
+                                         height: 22px; 
+                                         filter: brightness(0.3) contrast(1.5) drop-shadow(0 1px 3px rgba(0,0,0,0.5));
+                                         transition: all 0.3s ease;
+                                     ">
+                            </div>
+                            <div class="marker-pulse" style="
+                                position: absolute;
+                                top: -3px;
+                                left: -3px;
+                                right: -3px;
+                                bottom: -3px;
+                                border: 2px solid ${borderColor};
+                                border-radius: 50%;
+                                opacity: 0;
+                                transform: scale(1);
+                                animation: pulse 2s infinite ease-in-out;
+                            "></div>
+                        </div>`,
+                    iconSize: [46, 46],
+                    iconAnchor: [23, 23]
                 });
 
                 const marker = L.marker([item.lat, item.lng], { icon: icon }).addTo(currentMap);
@@ -313,7 +371,8 @@
                             ${item.status === 'full' ? 'Pleine' : 'Vide'}
                         </span><br>
                         <small>${item.timestamp}</small><br>
-                        <small>Taille: ${item.fileSize} MB</small>
+                        <small>Taille: ${item.fileSize} MB</small><br>
+                        <small>Fichier: ${item.filename}</small>
                     </div>
                 `);
             });
@@ -336,7 +395,12 @@
         function initChart() {
             const ctx = document.getElementById('binChart').getContext('2d');
             
-            new Chart(ctx, {
+            // Détruire le graphique existant s'il y en a un
+            if (currentBinChart) {
+                currentBinChart.destroy();
+            }
+            
+            currentBinChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: ['Vides', 'Pleines'],
@@ -361,54 +425,44 @@
             });
         }
 
-        // Graphique de distribution des tailles de fichiers
-        function initFileSizeChart() {
-            const ctx = document.getElementById('fileSizeChart').getContext('2d');
-            
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: fileSizeData.ranges,
-                    datasets: [{
-                        label: 'Nombre d\'images',
-                        data: fileSizeData.counts,
-                        backgroundColor: '#4CAF50',
-                        borderColor: '#388E3C',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-
-        // Graphique d'évolution temporelle
+        // Graphique d'évolution temporelle avec trois courbes
         function initTimelineChart() {
             const ctx = document.getElementById('timelineChart').getContext('2d');
             
-            new Chart(ctx, {
+            // Détruire le graphique existant s'il y en a un
+            if (currentTimelineChart) {
+                currentTimelineChart.destroy();
+            }
+            
+            currentTimelineChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: timelineData.dates,
                     datasets: [{
-                        label: 'Images uploadées',
-                        data: timelineData.uploads,
+                        label: 'Poubelles vides',
+                        data: timelineData.emptyUploads,
                         borderColor: '#4CAF50',
                         backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                        fill: true,
-                        tension: 0.4
+                        fill: false,
+                        tension: 0.4,
+                        borderWidth: 2
+                    }, {
+                        label: 'Poubelles pleines',
+                        data: timelineData.fullUploads,
+                        borderColor: '#f44336',
+                        backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                        fill: false,
+                        tension: 0.4,
+                        borderWidth: 2
+                    }, {
+                        label: 'Total',
+                        data: timelineData.uploads,
+                        borderColor: '#2196F3',
+                        backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                        fill: false,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        borderDash: [5, 5]
                     }]
                 },
                 options: {
@@ -416,12 +470,34 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            display: false
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
                         }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
                     },
                     scales: {
                         y: {
-                            beginAtZero: true
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
                         }
                     }
                 }
@@ -522,6 +598,22 @@
             document.getElementById('full-percentage').textContent = (uploadStats.fullPercentage || 0) + '%';
         }
 
+        // Fonction pour rafraîchir le dashboard
+        async function refreshDashboard() {
+            console.log('Rafraîchissement du dashboard...');
+            await loadDashboardData();
+            
+            // Mettre à jour tous les composants
+            updateMapMarkers();
+            initChart();
+            initTimelineChart();
+            generateRiskZones();
+            generateHistory();
+            updateStats();
+            
+            console.log('Dashboard rafraîchi avec succès');
+        }
+
         // Gestionnaires d'événements pour les filtres
         function setupEventListeners() {
             document.getElementById('locationFilter').addEventListener('change', updateMapMarkers);
@@ -531,6 +623,9 @@
             document.getElementById('locationHistoryFilter').addEventListener('change', generateHistory);
         }
 
+        // Exposer la fonction de rafraîchissement globalement
+        window.refreshDashboard = refreshDashboard;
+
         // Initialisation au chargement de la page
         document.addEventListener('DOMContentLoaded', async function() {
             // Charger les données réelles depuis l'API
@@ -539,12 +634,16 @@
             // Initialiser tous les composants avec les vraies données
             initMap();
             initChart();
-            initFileSizeChart();
             initTimelineChart();
             generateRiskZones();
             generateHistory();
             updateStats();
             setupEventListeners();
+            
+            // Rafraîchir automatiquement toutes les 30 secondes pour détecter les changements
+            setInterval(async function() {
+                await refreshDashboard();
+            }, 30000); // 30 secondes
         });
     </script>
     <script src="static/js/header-effects.js"></script>

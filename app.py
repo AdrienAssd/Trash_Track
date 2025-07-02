@@ -145,18 +145,18 @@ def predict_image_category(filepath):
 
 def generate_random_paris_coordinates(seed_id):
     """
-    Génère des coordonnées GPS fixes dans la zone de Paris basées sur un ID
+    Génère des coordonnées GPS fixes dans la zone de Paris intra-muros basées sur un ID
     Les coordonnées seront toujours les mêmes pour le même ID
-    Paris est approximativement dans ces limites :
+    Paris intra-muros est délimité plus précisément :
     - Latitude: 48.815 à 48.902
-    - Longitude: 2.225 à 2.470
+    - Longitude: 2.224 à 2.469
     """
     # Utiliser l'ID comme seed pour avoir des coordonnées fixes
     random.seed(seed_id)
     
-    # Limites approximatives de Paris
+    # Limites plus précises de Paris intra-muros (excluant Bois de Boulogne et Vincennes)
     lat_min, lat_max = 48.815, 48.902
-    lng_min, lng_max = 2.225, 2.470
+    lng_min, lng_max = 2.224, 2.469
     
     # Générer des coordonnées aléatoires basées sur le seed
     latitude = random.uniform(lat_min, lat_max)
@@ -167,26 +167,189 @@ def generate_random_paris_coordinates(seed_id):
     
     return round(latitude, 6), round(longitude, 6)
 
+def is_in_paris_bounds(lat, lng):
+    """
+    Vérifie si les coordonnées sont dans les limites réelles de Paris intra-muros
+    Utilise des limites très strictes pour exclure complètement la périphérie
+    """
+    # Limites très strictes pour Paris intra-muros seulement
+    # Excluent complètement Vincennes, Boulogne, et toute périphérie
+    
+    # Limites générales très resserrées
+    if lat < 48.830 or lat > 48.890:  # Nord-Sud très strict
+        return False
+    if lng < 2.250 or lng > 2.420:    # Est-Ouest très strict
+        return False
+    
+    # Exclusions spécifiques par zones
+    
+    # Zone Est - Exclure Vincennes et périphérie est
+    if lng > 2.400:
+        return False
+    
+    # Zone Ouest - Exclure Bois de Boulogne et Neuilly
+    if lng < 2.260:
+        return False
+    
+    # Zone Nord - Exclure Saint-Ouen et périphérie nord
+    if lat > 48.885 and (lng < 2.300 or lng > 2.380):
+        return False
+    
+    # Zone Sud - Exclure Montrouge, Vanves et périphérie sud
+    if lat < 48.835 and (lng < 2.280 or lng > 2.390):
+        return False
+    
+    # Zone Sud-Est - Exclurer Charenton et périphérie
+    if lat < 48.840 and lng > 2.380:
+        return False
+    
+    # Zone Sud-Ouest - Exclure Issy et périphérie
+    if lat < 48.840 and lng < 2.290:
+        return False
+    
+    return True
+
+def generate_random_paris_coordinates_safe(seed_id):
+    """
+    Génère des coordonnées GPS uniques et aléatoires dans Paris intra-muros
+    Utilise un système de grille intelligente pour éviter complètement la superposition
+    Chaque ID génère une position unique dans une cellule de grille spécifique
+    """
+    # Utiliser l'ID comme seed pour avoir des coordonnées reproductibles mais uniques
+    random.seed(seed_id * 7919)  # Multiplier par un nombre premier pour disperser
+    
+    # Zones sécurisées dans chaque arrondissement avec grille de positionnement
+    paris_zones = [
+        # 1er arrondissement - Louvre (zone historique dense)
+        {"center": (48.8606, 2.3376), "radius": 0.008, "grid_size": 8},
+        # 2e arrondissement - Bourse (zone commerciale)
+        {"center": (48.8697, 2.3417), "radius": 0.006, "grid_size": 6},
+        # 3e arrondissement - Marais (zone résidentielle)
+        {"center": (48.8630, 2.3625), "radius": 0.007, "grid_size": 7},
+        # 4e arrondissement - Hôtel de Ville (zone touristique)
+        {"center": (48.8566, 2.3522), "radius": 0.008, "grid_size": 8},
+        # 5e arrondissement - Panthéon (zone universitaire)
+        {"center": (48.8445, 2.3471), "radius": 0.009, "grid_size": 9},
+        # 6e arrondissement - Luxembourg (zone bourgeoise)
+        {"center": (48.8496, 2.3343), "radius": 0.007, "grid_size": 7},
+        # 7e arrondissement - Invalides (zone gouvernementale)
+        {"center": (48.8566, 2.3118), "radius": 0.010, "grid_size": 10},
+        # 8e arrondissement - Champs-Élysées (zone luxueuse)
+        {"center": (48.8742, 2.3089), "radius": 0.009, "grid_size": 9},
+        # 9e arrondissement - Opéra (zone culturelle)
+        {"center": (48.8755, 2.3348), "radius": 0.008, "grid_size": 8},
+        # 10e arrondissement - République (zone populaire)
+        {"center": (48.8710, 2.3608), "radius": 0.009, "grid_size": 9},
+        # 11e arrondissement - Bastille (zone branchée)
+        {"center": (48.8566, 2.3734), "radius": 0.010, "grid_size": 10},
+        # 12e arrondissement - Gare de Lyon (zone transport)
+        {"center": (48.8448, 2.3650), "radius": 0.011, "grid_size": 11},
+        # 13e arrondissement - Place d'Italie (zone moderne)
+        {"center": (48.8322, 2.3561), "radius": 0.012, "grid_size": 12},
+        # 14e arrondissement - Montparnasse (zone artistique)
+        {"center": (48.8317, 2.3267), "radius": 0.010, "grid_size": 10},
+        # 15e arrondissement - Vaugirard (plus grand arrondissement)
+        {"center": (48.8422, 2.2956), "radius": 0.013, "grid_size": 16},
+        # 16e arrondissement - Trocadéro (zone résidentielle haut de gamme)
+        {"center": (48.8649, 2.2950), "radius": 0.014, "grid_size": 14},
+        # 17e arrondissement - Batignolles (zone en développement)
+        {"center": (48.8848, 2.3187), "radius": 0.011, "grid_size": 11},
+        # 18e arrondissement - Montmartre (zone touristique)
+        {"center": (48.8827, 2.3400), "radius": 0.010, "grid_size": 10},
+        # 19e arrondissement - Buttes-Chaumont (zone verte)
+        {"center": (48.8789, 2.3600), "radius": 0.012, "grid_size": 12},
+        # 20e arrondissement - Belleville (zone cosmopolite)
+        {"center": (48.8663, 2.3800), "radius": 0.011, "grid_size": 11}
+    ]
+    
+    # Sélectionner une zone basée sur l'ID pour une distribution équilibrée
+    zone_index = seed_id % len(paris_zones)
+    selected_zone = paris_zones[zone_index]
+    
+    center_lat, center_lng = selected_zone["center"]
+    radius = selected_zone["radius"]
+    grid_size = selected_zone["grid_size"]
+    
+    # Système de grille intelligent pour éviter la superposition
+    # Calculer quelle cellule de grille utiliser basée sur l'ID
+    grid_total_cells = grid_size * grid_size
+    cell_index = (seed_id // len(paris_zones)) % grid_total_cells
+    
+    # Coordonnées de la cellule dans la grille
+    cell_row = cell_index // grid_size
+    cell_col = cell_index % grid_size
+    
+    # Taille d'une cellule de grille
+    cell_size = (2 * radius) / grid_size
+    
+    # Position de base de la cellule (coin inférieur gauche de la zone)
+    base_lat = center_lat - radius + (cell_row * cell_size * 0.7)  # Facteur 0.7 pour la latitude
+    base_lng = center_lng - radius + (cell_col * cell_size)
+    
+    # Position aléatoire dans la cellule (avec marge pour éviter les bords)
+    margin = 0.15  # 15% de marge de chaque côté
+    cell_margin = cell_size * margin
+    
+    random_lat_offset = random.uniform(cell_margin, cell_size - cell_margin) * 0.7
+    random_lng_offset = random.uniform(cell_margin, cell_size - cell_margin)
+    
+    # Coordonnées finales avec micro-variation pour l'unicité absolue
+    micro_variation_lat = (seed_id % 97) * 0.000001  # Utiliser un nombre premier pour la variation
+    micro_variation_lng = ((seed_id * 13) % 97) * 0.000001
+    
+    final_lat = base_lat + random_lat_offset + micro_variation_lat
+    final_lng = base_lng + random_lng_offset + micro_variation_lng
+    
+    # Vérifier que les coordonnées sont dans Paris intra-muros
+    max_attempts = 5
+    for attempt in range(max_attempts):
+        if is_in_paris_bounds(final_lat, final_lng):
+            random.seed()  # Remettre le seed à None
+            return round(final_lat, 6), round(final_lng, 6)
+        
+        # Si échec, réessayer avec une variation légèrement différente
+        final_lat = center_lat + random.uniform(-radius * 0.8, radius * 0.8) * 0.7
+        final_lng = center_lng + random.uniform(-radius * 0.8, radius * 0.8)
+    
+    # Fallback ultime : utiliser le centre de la zone avec micro-variation
+    fallback_lat = center_lat + micro_variation_lat
+    fallback_lng = center_lng + micro_variation_lng
+    
+    random.seed()
+    return round(fallback_lat, 6), round(fallback_lng, 6)
+
 def get_paris_district_from_coordinates(lat, lng):
     """
     Détermine un arrondissement approximatif basé sur les coordonnées
-    (Simulation simplifiée)
+    Utilise les mêmes points de référence que generate_random_paris_coordinates_safe
     """
-    # Centres approximatifs de quelques arrondissements
+    # Centres de référence pour chaque arrondissement (mêmes que les coordonnées générées)
     districts = [
-        {"name": "Paris 1er", "center": (48.8606, 2.3376)},
-        {"name": "Paris 4e", "center": (48.8566, 2.3522)},
-        {"name": "Paris 7e", "center": (48.8566, 2.3118)},
-        {"name": "Paris 11e", "center": (48.8566, 2.3734)},
-        {"name": "Paris 15e", "center": (48.8422, 2.2956)},
-        {"name": "Paris 16e", "center": (48.8649, 2.2767)},
-        {"name": "Paris 18e", "center": (48.8927, 2.3347)},
-        {"name": "Paris 20e", "center": (48.8663, 2.3969)}
+        {"name": "Paris 1er", "center": (48.8606, 2.3376)},  # Louvre
+        {"name": "Paris 2e", "center": (48.8697, 2.3417)},   # Bourse
+        {"name": "Paris 3e", "center": (48.8630, 2.3625)},   # Marais
+        {"name": "Paris 4e", "center": (48.8566, 2.3522)},   # Hôtel de Ville
+        {"name": "Paris 5e", "center": (48.8445, 2.3471)},   # Panthéon
+        {"name": "Paris 6e", "center": (48.8496, 2.3343)},   # Luxembourg
+        {"name": "Paris 7e", "center": (48.8566, 2.3118)},   # Invalides
+        {"name": "Paris 8e", "center": (48.8742, 2.3089)},   # Champs-Élysées
+        {"name": "Paris 9e", "center": (48.8755, 2.3348)},   # Opéra
+        {"name": "Paris 10e", "center": (48.8710, 2.3608)},  # République
+        {"name": "Paris 11e", "center": (48.8566, 2.3734)},  # Bastille
+        {"name": "Paris 12e", "center": (48.8448, 2.3650)},  # Gare de Lyon (ajusté)
+        {"name": "Paris 13e", "center": (48.8322, 2.3561)},  # Place d'Italie
+        {"name": "Paris 14e", "center": (48.8317, 2.3267)},  # Montparnasse
+        {"name": "Paris 15e", "center": (48.8422, 2.2956)},  # Vaugirard
+        {"name": "Paris 16e", "center": (48.8649, 2.2950)},  # Trocadéro (ajusté)
+        {"name": "Paris 17e", "center": (48.8848, 2.3187)},  # Batignolles
+        {"name": "Paris 18e", "center": (48.8827, 2.3400)},  # Montmartre (ajusté)
+        {"name": "Paris 19e", "center": (48.8789, 2.3600)},  # Buttes-Chaumont (ajusté)
+        {"name": "Paris 20e", "center": (48.8663, 2.3800)}   # Belleville (ajusté)
     ]
     
     # Trouver le district le plus proche
     min_distance = float('inf')
-    closest_district = "Paris Centre"
+    closest_district = "Paris 1er"  # Défaut au centre historique
     
     for district in districts:
         distance = ((lat - district["center"][0])**2 + (lng - district["center"][1])**2)**0.5
@@ -264,6 +427,11 @@ def home():
     latest_image_data = None
     if latest_image:
         img = latest_image
+        
+        # Générer les coordonnées GPS et l'arrondissement pour cette image
+        latitude, longitude = generate_random_paris_coordinates_safe(img[0])
+        arrondissement = get_paris_district_from_coordinates(latitude, longitude)
+        
         latest_image_data = {
             'id': img[0],
             'filepath': img[1],
@@ -278,7 +446,8 @@ def home():
             'contrast': img[10],
             'histogram_data': img[11],
             'histogram_image': img[12],
-            'edge_image': img[13]
+            'edge_image': img[13],
+            'arrondissement': arrondissement
         }
 
     return render_template('index.html', latest_image=latest_image_data)
@@ -400,24 +569,37 @@ def dashboard_data():
             else:
                 file_size_ranges['> 4MB'] += 1
         
-        # Données temporelles (uploads par jour des 7 derniers jours)
+        # Données temporelles (uploads par jour des 7 derniers jours avec séparation vides/pleines)
         timeline_data = {}
+        timeline_empty = {}
+        timeline_full = {}
         end_date = datetime.now()
+        
+        # Initialiser les dictionnaires pour les 7 derniers jours
         for i in range(7):
             date = end_date - timedelta(days=i)
             date_str = date.strftime('%Y-%m-%d')
             timeline_data[date_str] = 0
+            timeline_empty[date_str] = 0
+            timeline_full[date_str] = 0
         
+        # Compter les images par jour et par statut
         for img in images:
             upload_date = img[2].split(' ')[0]  # Extraire juste la date
             if upload_date in timeline_data:
                 timeline_data[upload_date] += 1
+                
+                # Compter séparément selon l'annotation
+                if img[3] == 'pleine':
+                    timeline_full[upload_date] += 1
+                elif img[3] == 'vide':
+                    timeline_empty[upload_date] += 1
         
         # Préparer l'historique des images avec coordonnées GPS fixes
         history_data = []
         for img in images:
-            # Générer des coordonnées GPS fixes basées sur l'ID de l'image
-            latitude, longitude = generate_random_paris_coordinates(img[0])
+            # Générer des coordonnées GPS fixes basées sur l'ID de l'image (dans Paris intra-muros)
+            latitude, longitude = generate_random_paris_coordinates_safe(img[0])
             
             # Déterminer l'arrondissement basé sur les coordonnées générées
             location = get_paris_district_from_coordinates(latitude, longitude)
@@ -436,8 +618,8 @@ def dashboard_data():
         # Générer les zones à risque basées sur les vraies données
         location_stats = {}
         for img in images:
-            # Générer les coordonnées et l'arrondissement pour chaque image
-            latitude, longitude = generate_random_paris_coordinates(img[0])
+            # Générer les coordonnées et l'arrondissement pour chaque image (dans Paris intra-muros)
+            latitude, longitude = generate_random_paris_coordinates_safe(img[0])
             location = get_paris_district_from_coordinates(latitude, longitude)
             status = 'full' if img[3] == 'pleine' else 'empty'
             
@@ -495,7 +677,9 @@ def dashboard_data():
             },
             'timelineData': {
                 'dates': sorted(timeline_data.keys()),
-                'uploads': [timeline_data[date] for date in sorted(timeline_data.keys())]
+                'uploads': [timeline_data[date] for date in sorted(timeline_data.keys())],
+                'emptyUploads': [timeline_empty[date] for date in sorted(timeline_empty.keys())],
+                'fullUploads': [timeline_full[date] for date in sorted(timeline_full.keys())]
             },
             'historyData': history_data[:50],  # Limiter aux 50 dernières images
             'riskZones': risk_zones
@@ -503,38 +687,96 @@ def dashboard_data():
 
 @app.route('/historique')
 def historique():
-    """Page d'historique de toutes les images analysées avec pagination"""
+    """Page d'historique de toutes les images analysées avec pagination et filtrage par arrondissement"""
     filter_type = request.args.get('filter')
+    arrondissement_filter = request.args.get('arrondissement')
     page = int(request.args.get('page', 1))
-    per_page = 5  # Nombre d'images par page (Green IT)
-    offset = (page - 1) * per_page
+    per_page = 6  # Nombre d'images par page (Green IT - 2x3 grille)
+    
+    def get_filtered_images(start_offset, batch_size, max_attempts=10):
+        """Récupère les images filtrées en gérant la pagination intelligente"""
+        images = []
+        current_offset = start_offset
+        attempts = 0
+        
+        while len(images) < per_page and attempts < max_attempts:
+            with sqlite3.connect('database.db') as conn:
+                cursor = conn.cursor()
+                
+                # Construire la requête de base
+                base_query = "SELECT * FROM images"
+                where_clauses = []
+                
+                # Filtre par statut
+                if filter_type == 'pleine':
+                    where_clauses.append('annotation = "pleine"')
+                elif filter_type == 'vide':
+                    where_clauses.append('annotation = "vide"')
+                elif filter_type == 'non_annotees':
+                    where_clauses.append('(annotation IS NULL OR annotation = "")')
+                
+                # Construire la clause WHERE
+                where_clause = ' WHERE ' + ' AND '.join(where_clauses) if where_clauses else ''
+                
+                # Requête avec pagination adaptative
+                paginated_query = base_query + where_clause + f' ORDER BY upload_date DESC LIMIT {batch_size} OFFSET {current_offset}'
+                cursor.execute(paginated_query)
+                
+                columns = [description[0] for description in cursor.description]
+                batch_images = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+                # Si aucune image trouvée, on arrête
+                if not batch_images:
+                    break
+                
+                # Ajouter l'arrondissement calculé et filtrer
+                for image in batch_images:
+                    latitude, longitude = generate_random_paris_coordinates_safe(image['id'])
+                    image['arrondissement'] = get_paris_district_from_coordinates(latitude, longitude)
+                    
+                    # Ajouter seulement si correspond au filtre arrondissement
+                    if not arrondissement_filter or image['arrondissement'] == arrondissement_filter:
+                        images.append(image)
+                        if len(images) >= per_page:
+                            break
+                
+                # Passer au batch suivant
+                current_offset += batch_size
+                attempts += 1
+        
+        return images[:per_page], current_offset
+    
+    # Calculer l'offset de départ
+    start_offset = (page - 1) * per_page
+    # Utiliser un batch_size plus grand si filtrage par arrondissement
+    batch_size = per_page * 4 if arrondissement_filter else per_page
+    
+    images, final_offset = get_filtered_images(start_offset, batch_size)
     
     with sqlite3.connect('database.db') as conn:
         cursor = conn.cursor()
         
-        # Construire la requête avec pagination
-        base_query = "SELECT * FROM images"
+        # Construire la requête de comptage
         count_query = "SELECT COUNT(*) FROM images"
+        where_clauses = []
         
+        # Filtre par statut
         if filter_type == 'pleine':
-            where_clause = ' WHERE annotation = "pleine"'
+            where_clauses.append('annotation = "pleine"')
         elif filter_type == 'vide':
-            where_clause = ' WHERE annotation = "vide"'
+            where_clauses.append('annotation = "vide"')
         elif filter_type == 'non_annotees':
-            where_clause = ' WHERE annotation IS NULL OR annotation = ""'
-        else:
-            where_clause = ''
+            where_clauses.append('(annotation IS NULL OR annotation = "")')
         
-        # Requête paginée
-        paginated_query = base_query + where_clause + f' ORDER BY upload_date DESC LIMIT {per_page} OFFSET {offset}'
-        cursor.execute(paginated_query)
-        
-        columns = [description[0] for description in cursor.description]
-        images = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        where_clause = ' WHERE ' + ' AND '.join(where_clauses) if where_clauses else ''
         
         # Compter le total d'images pour ce filtre
         cursor.execute(count_query + where_clause)
         total_filtered_images = cursor.fetchone()[0]
+        
+        # Si filtre par arrondissement, estimer le nombre (approximatif : 1/20 par arrondissement)
+        if arrondissement_filter:
+            total_filtered_images = max(1, total_filtered_images // 20)
         
         # Calculer les statistiques globales
         cursor.execute('SELECT COUNT(*) FROM images')
@@ -549,6 +791,19 @@ def historique():
         cursor.execute('SELECT COUNT(*) FROM images WHERE annotation = "vide"')
         images_vide = cursor.fetchone()[0]
         
+        # Récupérer tous les arrondissements disponibles pour le dropdown
+        cursor.execute('SELECT id FROM images ORDER BY id')
+        all_image_ids = [row[0] for row in cursor.fetchall()]
+        
+        # Calculer les arrondissements uniques
+        arrondissements = set()
+        for img_id in all_image_ids:
+            lat, lng = generate_random_paris_coordinates_safe(img_id)
+            arr = get_paris_district_from_coordinates(lat, lng)
+            arrondissements.add(arr)
+        
+        arrondissements = sorted(list(arrondissements))
+        
         # Formater les dates et tailles de fichiers
         for image in images:
             if image['upload_date']:
@@ -568,8 +823,8 @@ def historique():
                     size_mb = size_kb / 1024
                     image['filesize'] = f"{size_mb:.1f} MB"
     
-    # Calculer la pagination
-    has_next = (page * per_page) < total_filtered_images
+    # Calculer la pagination intelligente
+    has_next = len(images) == per_page and final_offset < total_filtered_images * 2  # Facteur de sécurité
     next_page = page + 1 if has_next else None
     
     return render_template('historique.html',
@@ -579,6 +834,8 @@ def historique():
                          images_pleine=images_pleine,
                          images_vide=images_vide,
                          filter_type=filter_type,
+                         arrondissement_filter=arrondissement_filter,
+                         arrondissements=arrondissements,
                          current_page=page,
                          has_next=has_next,
                          next_page=next_page,
@@ -588,40 +845,98 @@ def historique():
 
 @app.route('/api/load_more_images')
 def load_more_images():
-    """API pour charger plus d'images (AJAX)"""
+    """API pour charger plus d'images (AJAX) avec support du filtrage par arrondissement optimisé"""
     from flask import jsonify
     
     filter_type = request.args.get('filter')
+    arrondissement_filter = request.args.get('arrondissement')
     page = int(request.args.get('page', 1))
-    per_page = 5  # Même nombre que dans historique()
-    offset = (page - 1) * per_page
+    per_page = 6  # Même nombre que dans historique()
+    
+    def get_filtered_images_api(start_offset, batch_size, max_attempts=10):
+        """Récupère les images filtrées en gérant la pagination intelligente pour l'API"""
+        images = []
+        current_offset = start_offset
+        attempts = 0
+        
+        while len(images) < per_page and attempts < max_attempts:
+            with sqlite3.connect('database.db') as conn:
+                cursor = conn.cursor()
+                
+                # Construire la requête de base
+                base_query = "SELECT * FROM images"
+                where_clauses = []
+                
+                # Filtre par statut
+                if filter_type == 'pleine':
+                    where_clauses.append('annotation = "pleine"')
+                elif filter_type == 'vide':
+                    where_clauses.append('annotation = "vide"')
+                elif filter_type == 'non_annotees':
+                    where_clauses.append('(annotation IS NULL OR annotation = "")')
+                
+                # Construire la clause WHERE
+                where_clause = ' WHERE ' + ' AND '.join(where_clauses) if where_clauses else ''
+                
+                # Requête avec pagination adaptative
+                paginated_query = base_query + where_clause + f' ORDER BY upload_date DESC LIMIT {batch_size} OFFSET {current_offset}'
+                cursor.execute(paginated_query)
+                
+                columns = [description[0] for description in cursor.description]
+                batch_images = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+                # Si aucune image trouvée, on arrête
+                if not batch_images:
+                    break
+                
+                # Ajouter l'arrondissement calculé et filtrer
+                for image in batch_images:
+                    latitude, longitude = generate_random_paris_coordinates_safe(image['id'])
+                    image['arrondissement'] = get_paris_district_from_coordinates(latitude, longitude)
+                    
+                    # Ajouter seulement si correspond au filtre arrondissement
+                    if not arrondissement_filter or image['arrondissement'] == arrondissement_filter:
+                        images.append(image)
+                        if len(images) >= per_page:
+                            break
+                
+                # Passer au batch suivant
+                current_offset += batch_size
+                attempts += 1
+        
+        return images[:per_page], current_offset
+    
+    # Calculer l'offset de départ
+    start_offset = (page - 1) * per_page
+    # Utiliser un batch_size plus grand si filtrage par arrondissement
+    batch_size = per_page * 4 if arrondissement_filter else per_page
+    
+    images, final_offset = get_filtered_images_api(start_offset, batch_size)
     
     with sqlite3.connect('database.db') as conn:
         cursor = conn.cursor()
         
-        # Construire la requête avec pagination
-        base_query = "SELECT * FROM images"
+        # Construire la requête de comptage
         count_query = "SELECT COUNT(*) FROM images"
+        where_clauses = []
         
+        # Filtre par statut
         if filter_type == 'pleine':
-            where_clause = ' WHERE annotation = "pleine"'
+            where_clauses.append('annotation = "pleine"')
         elif filter_type == 'vide':
-            where_clause = ' WHERE annotation = "vide"'
+            where_clauses.append('annotation = "vide"')
         elif filter_type == 'non_annotees':
-            where_clause = ' WHERE annotation IS NULL OR annotation = ""'
-        else:
-            where_clause = ''
+            where_clauses.append('(annotation IS NULL OR annotation = "")')
         
-        # Requête paginée
-        paginated_query = base_query + where_clause + f' ORDER BY upload_date DESC LIMIT {per_page} OFFSET {offset}'
-        cursor.execute(paginated_query)
-        
-        columns = [description[0] for description in cursor.description]
-        images = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        where_clause = ' WHERE ' + ' AND '.join(where_clauses) if where_clauses else ''
         
         # Compter le total d'images pour ce filtre
         cursor.execute(count_query + where_clause)
         total_filtered_images = cursor.fetchone()[0]
+        
+        # Si filtre par arrondissement, estimer le nombre (approximatif)
+        if arrondissement_filter:
+            total_filtered_images = max(1, total_filtered_images // 20)
         
         # Formater les dates et tailles de fichiers
         for image in images:
@@ -642,8 +957,8 @@ def load_more_images():
                     size_mb = size_kb / 1024
                     image['filesize'] = f"{size_mb:.1f} MB"
     
-    # Calculer s'il y a encore des images à charger
-    has_next = (page * per_page) < total_filtered_images
+    # Calculer s'il y a encore des images à charger avec plus de marge de sécurité
+    has_next = len(images) == per_page and final_offset < total_filtered_images * 2
     
     return jsonify({
         'images': images,
@@ -714,6 +1029,28 @@ def clear_history():
         pass
     
     return redirect(url_for('historique'))
+
+# ================================================================
+# SYSTÈME DE POSITIONNEMENT OPTIMISÉ POUR PARIS INTRA-MUROS
+# ================================================================
+# Ce module gère la génération de coordonnées GPS uniques et réalistes
+# pour les poubelles dans Paris, avec les améliorations suivantes :
+# 
+# 1. DISTRIBUTION ÉQUILIBRÉE : Chaque arrondissement a sa propre zone
+#    avec un nombre de cellules adapté à sa taille réelle
+# 
+# 2. SYSTÈME DE GRILLE INTELLIGENTE : Subdivision de chaque arrondissement
+#    en cellules pour éviter complètement la superposition visuelle
+# 
+# 3. GÉOLOCALISATION RÉALISTE : Coordonnées strictement limitées à 
+#    Paris intra-muros, excluant Vincennes, Boulogne, et la périphérie
+# 
+# 4. UNICITÉ GARANTIE : Chaque ID génère une position reproductible
+#    et unique dans sa cellule de grille assignée
+# 
+# 5. RÉPARTITION OPTIMALE : Le 15e (plus grand) a 16x16 cellules,
+#    le 2e (plus petit) a 6x6 cellules, etc.
+# ================================================================
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -48,6 +48,7 @@
                         <div class="image-info">
                             <p><strong>Nom du fichier:</strong> <span style="font-family: monospace; word-break: break-all;">{{ latest_image['filepath'].split('/')[-1] }}</span></p>
                             <p><strong>Statut:</strong> <span class="status-{{ latest_image['annotation'] }}">{{ latest_image['annotation'].title() }}</span></p>
+                            <p><strong>Arrondissement:</strong> <span style="font-weight: 600; color: #3498db;">{{ latest_image['arrondissement'] }}</span></p>
                             <p><strong>Dimensions:</strong> {{ latest_image['width'] }}x{{ latest_image['height'] }}</p>
                             <p><strong>Taille:</strong> {{ latest_image['filesize'] }}</p>
                             <p><strong>Date d'upload:</strong> {{ latest_image['upload_date'] }}</p>

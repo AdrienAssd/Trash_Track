@@ -28,9 +28,13 @@
         
         .stats-section {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
             gap: 1.5rem;
             margin-bottom: 3rem;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
         }
         
         .stat-card {
@@ -64,9 +68,15 @@
         
         .images-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            grid-template-columns: 1fr 1fr;
             gap: 2rem;
             margin-top: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .images-grid {
+                grid-template-columns: 1fr;
+            }
         }
         
         .image-card {
@@ -77,6 +87,10 @@
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: fit-content;
+            min-height: 600px;
+            display: flex;
+            flex-direction: column;
         }
         
         .image-card:hover {
@@ -104,15 +118,17 @@
         
         .main-image {
             width: 100%;
-            max-height: 200px;
+            max-height: 180px;
             object-fit: cover;
             border-radius: 10px;
             margin-bottom: 1rem;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            flex-shrink: 0;
         }
         
         .image-details {
             margin-bottom: 1.5rem;
+            flex-grow: 1;
         }
         
         .detail-row {
@@ -184,7 +200,7 @@
         
         .analysis-image {
             width: 100%;
-            max-height: 120px;
+            max-height: 100px;
             object-fit: contain;
             border-radius: 8px;
             background: #f8f9fa;
@@ -208,6 +224,7 @@
             gap: 1rem;
             flex-wrap: wrap;
             justify-content: center;
+            margin-bottom: 1.5rem;
         }
         
         .filter-btn {
@@ -231,6 +248,53 @@
         .filter-btn.active {
             background: #3498db;
             color: white;
+        }
+        
+        /* Style pour le sélecteur d'arrondissement */
+        .arrondissement-filter {
+            display: inline-flex;
+            gap: 1rem;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .arrondissement-select {
+            padding: 0.8rem 1.5rem;
+            border: 2px solid rgba(52, 152, 219, 0.3);
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.95);
+            color: #2c3e50;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            outline: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233498db' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1rem;
+            padding-right: 3rem;
+            min-width: 200px;
+        }
+        
+        .arrondissement-select:hover {
+            border-color: #3498db;
+            background: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.2);
+        }
+        
+        .arrondissement-select:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+        
+        .filter-label {
+            color: #7f8c8d;
+            font-weight: 600;
+            font-size: 0.9rem;
         }
         
         .clear-history-btn {
@@ -348,11 +412,26 @@
             
             <!-- Section de filtrage -->
             <div class="filter-section">
+                <!-- Filtres par statut -->
                 <div class="filter-buttons">
-                    <a href="{{ url_for('historique') }}" class="filter-btn {{ 'active' if not filter_type else '' }}">Toutes</a>
-                    <a href="{{ url_for('historique', filter='pleine') }}" class="filter-btn {{ 'active' if filter_type == 'pleine' else '' }}">Pleines</a>
-                    <a href="{{ url_for('historique', filter='vide') }}" class="filter-btn {{ 'active' if filter_type == 'vide' else '' }}">Vides</a>
-                    <a href="{{ url_for('historique', filter='non_annotees') }}" class="filter-btn {{ 'active' if filter_type == 'non_annotees' else '' }}">Non Annotées</a>
+                    <a href="{{ url_for('historique', arrondissement=arrondissement_filter) if arrondissement_filter else url_for('historique') }}" 
+                       class="filter-btn {{ 'active' if not filter_type else '' }}">Toutes</a>
+                    <a href="{{ url_for('historique', filter='pleine', arrondissement=arrondissement_filter) if arrondissement_filter else url_for('historique', filter='pleine') }}" 
+                       class="filter-btn {{ 'active' if filter_type == 'pleine' else '' }}">Pleines</a>
+                    <a href="{{ url_for('historique', filter='vide', arrondissement=arrondissement_filter) if arrondissement_filter else url_for('historique', filter='vide') }}" 
+                       class="filter-btn {{ 'active' if filter_type == 'vide' else '' }}">Vides</a>
+                    <a href="{{ url_for('historique', filter='non_annotees', arrondissement=arrondissement_filter) if arrondissement_filter else url_for('historique', filter='non_annotees') }}" 
+                       class="filter-btn {{ 'active' if filter_type == 'non_annotees' else '' }}">Non Annotées</a>
+                </div>
+                
+                <!-- Filtre par arrondissement -->
+                <div class="arrondissement-filter">
+                    <select class="arrondissement-select" id="arrondissementSelect" onchange="filterByArrondissement()">
+                        <option value="">Tous les arrondissements</option>
+                        {% for arr in arrondissements %}
+                        <option value="{{ arr }}" {{ 'selected' if arrondissement_filter == arr else '' }}>{{ arr }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 
                 {% if total_images > 0 %}
@@ -395,6 +474,10 @@
                                     {{ image['annotation'] or "Non Annoté" }}
                                 </span>
                             </span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Arrondissement:</span>
+                            <span class="detail-value" style="font-weight: 600; color: #3498db;">{{ image['arrondissement'] }}</span>
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">Dimensions:</span>
@@ -450,8 +533,9 @@
             <div class="load-more-section" style="text-align: center; margin-top: 2rem;">
                 <button id="load-more-btn" class="load-more-btn" 
                         data-next-page="{{ next_page }}" 
-                        data-filter="{{ filter_type or '' }}">
-                    🌱 Charger 5 images supplémentaires
+                        data-filter="{{ filter_type or '' }}"
+                        data-arrondissement="{{ arrondissement_filter or '' }}">
+                    🌱 Charger 6 images supplémentaires
                 </button>
                 <div id="loading-indicator" class="loading-indicator" style="display: none;">
                     <p>⏳ Chargement en cours...</p>
@@ -544,6 +628,7 @@
                 loadMoreBtn.addEventListener('click', function() {
                     const nextPage = this.dataset.nextPage;
                     const filter = this.dataset.filter;
+                    const arrondissement = this.dataset.arrondissement;
                     
                     // Désactiver le bouton et afficher l'indicateur de chargement
                     loadMoreBtn.disabled = true;
@@ -554,6 +639,9 @@
                     let apiUrl = `/api/load_more_images?page=${nextPage}`;
                     if (filter) {
                         apiUrl += `&filter=${filter}`;
+                    }
+                    if (arrondissement) {
+                        apiUrl += `&arrondissement=${encodeURIComponent(arrondissement)}`;
                     }
                     
                     // Faire la requête AJAX
@@ -621,6 +709,10 @@
                         </span>
                     </div>
                     <div class="detail-row">
+                        <span class="detail-label">Arrondissement:</span>
+                        <span class="detail-value" style="font-weight: 600; color: #3498db;">${image.arrondissement || 'Non défini'}</span>
+                    </div>
+                    <div class="detail-row">
                         <span class="detail-label">Dimensions:</span>
                         <span class="detail-value">${image.width}×${image.height} px</span>
                     </div>
@@ -666,6 +758,37 @@
                 </div>
             `;
             return div;
+        }
+        
+        // Fonction pour gérer le filtrage par arrondissement
+        function filterByArrondissement() {
+            const select = document.getElementById('arrondissementSelect');
+            const selectedArrondissement = select.value;
+            
+            // Construire l'URL avec les paramètres actuels
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentFilter = urlParams.get('filter');
+            
+            let newUrl = window.location.pathname;
+            const params = [];
+            
+            // Conserver le filtre de statut s'il existe
+            if (currentFilter) {
+                params.push(`filter=${currentFilter}`);
+            }
+            
+            // Ajouter le filtre d'arrondissement s'il est sélectionné
+            if (selectedArrondissement) {
+                params.push(`arrondissement=${encodeURIComponent(selectedArrondissement)}`);
+            }
+            
+            // Construire l'URL finale
+            if (params.length > 0) {
+                newUrl += '?' + params.join('&');
+            }
+            
+            // Rediriger vers la nouvelle URL
+            window.location.href = newUrl;
         }
         
         // Initialisation au chargement de la page

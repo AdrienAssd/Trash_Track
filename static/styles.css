@@ -415,23 +415,31 @@ body {
 
 .stat-item {
     text-align: center;
-    padding: 1rem;
+    padding: 1.2rem 0.8rem;
     background: linear-gradient(145deg, #E8F5E8, #C8E6C9);
     border-radius: 15px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
 .stat-number {
-    font-size: 2rem;
+    font-size: 1.8rem;
     font-weight: 700;
     color: #4CAF50;
     display: block;
+    line-height: 1.2;
 }
 
 .stat-label {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: #666;
     margin-top: 0.5rem;
+    font-weight: 500;
 }
 
 /* Boîtes pour les pourcentages */
@@ -490,6 +498,12 @@ body {
 
 .percentage-full {
     color: #FF5722;
+}
+
+/* Style pour les pourcentages combinés */
+.percentage-mixed {
+    color: #4CAF50;
+    font-weight: 700;
 }
 
 /* Distribution des Tailles de Fichiers et Évolution Temporelle */
@@ -564,14 +578,102 @@ body {
 }
 
 .custom-marker {
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 50%;
-    border: 2px solid #4CAF50;
+    background: transparent;
+    border: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    border-radius: 50%;
+    overflow: hidden;
+}
+
+.custom-marker-container {
+    background: transparent !important;
+    border: none !important;
+}
+
+/* Animation de pulsation améliorée */
+@keyframes pulse {
+    0% {
+        opacity: 0;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1.2);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(1.4);
+    }
+}
+
+/* Animation de brillance pour effet premium */
+@keyframes shimmer {
+    0% { 
+        background-position: -200% 0; 
+    }
+    100% { 
+        background-position: 200% 0; 
+    }
+}
+
+/* Amélioration des marqueurs de carte */
+.custom-marker-container .marker-wrapper {
+    position: relative;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.custom-marker-container .marker-wrapper::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.6) 50%, transparent 60%);
+    background-size: 200% 200%;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    animation: shimmer 3s infinite linear;
+    pointer-events: none;
+}
+
+/* Effets au survol améliorés */
+.custom-marker-container .marker-wrapper:hover {
+    transform: scale(1.15) translateY(-2px);
+    box-shadow: 
+        0 12px 35px rgba(0, 0, 0, 0.2), 
+        0 6px 15px rgba(0, 0, 0, 0.1),
+        inset 0 1px 3px rgba(255,255,255,0.4),
+        0 0 0 6px rgba(76, 175, 80, 0.2) !important;
+}
+
+.custom-marker-container .marker-wrapper:hover .marker-inner {
+    transform: scale(1.05);
+    background: rgba(255, 255, 255, 1);
+}
+
+.custom-marker-container .marker-wrapper:hover img {
+    transform: scale(1.1);
+}
+
+/* Animation d'apparition */
+.custom-marker-container .marker-wrapper {
+    animation: markerAppear 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes markerAppear {
+    0% {
+        opacity: 0;
+        transform: scale(0.3) translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
 }
 
 /* Correction de la syntaxe pour les styles des zones à risques */
@@ -628,6 +730,14 @@ body {
     gap: 2rem;
 }
 
+/* Analytics grid avec un seul graphique qui prend toute la largeur */
+.analytics-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
 /* Style pour les contributeurs */
 .leaflet-control-attribution {
     font-size: 0.7rem;
@@ -682,12 +792,14 @@ body {
     margin: 1rem 0;
 }
 
-/* Espacement entre les éléments de upload-stats */
+/* Espacement entre les éléments de upload-stats - Format 2x2 */
 .upload-stats {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    margin-top: 2rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
 }
 
 /* Style pour la page d'accueil */
