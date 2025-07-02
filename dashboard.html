@@ -24,7 +24,7 @@
             </div>
             <nav class="nav">
                 <a href="/" class="nav-link">Accueil</a>
-                <a href="/dashboard.html" class="nav-link">Dashboard</a>
+                <a href="/dashboard.html" class="nav-link active">Dashboard</a>
                 <a href="/apropos.html" class="nav-link">À propos</a>
                 <a href="/historique" class="nav-link">Historique</a>
                 <a href="/contact.html" class="nav-link">Contact</a>
@@ -89,6 +89,19 @@
                     
                     <div class="chart-container">
                         <canvas id="binChart"></canvas>
+                    </div>
+                    
+                    <!-- Séparateur visuel -->
+                    <div style="border-top: 1px solid #e0e0e0; margin: 20px 0;"></div>
+                    
+                    <!-- Titre pour la répartition géographique -->
+                    <h3 style="text-align: center; color: #666; margin-bottom: 15px; font-size: 14px;">
+                        <span class="card-icon"></span>
+                        Répartition par Arrondissement
+                    </h3>
+                    
+                    <div class="chart-container">
+                        <canvas id="locationChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -187,6 +200,7 @@
         let uploadStats = {};
         let fileSizeData = {};
         let timelineData = {};
+        let locationData = {};
         let riskZones = [];
         let historyData = [];
 
@@ -205,6 +219,7 @@
                 uploadStats = dashboardData.stats;
                 fileSizeData = dashboardData.fileSizeData;
                 timelineData = dashboardData.timelineData;
+                locationData = dashboardData.locationData;
                 
                 riskZones = dashboardData.riskZones;
                 historyData = dashboardData.historyData;
@@ -239,6 +254,10 @@
                 emptyUploads: [],
                 fullUploads: []
             };
+            locationData = {
+                locations: [],
+                counts: []
+            };
             riskZones = [];
             historyData = [];
         }
@@ -247,6 +266,7 @@
         let currentMarkers = [];
         let currentTimelineChart = null;
         let currentBinChart = null;
+        let currentLocationChart = null;
 
         // Initialisation de la carte avec zones à risque
         function initMap() {
@@ -425,6 +445,54 @@
             });
         }
 
+        // Initialisation du graphique de répartition géographique
+        function initLocationChart() {
+            const ctx = document.getElementById('locationChart').getContext('2d');
+            
+            // Détruire le graphique existant s'il y en a un
+            if (currentLocationChart) {
+                currentLocationChart.destroy();
+            }
+            
+            // Génération de couleurs dynamiques pour les arrondissements
+            const generateColors = (count) => {
+                const colors = [];
+                for (let i = 0; i < count; i++) {
+                    const hue = (i * 137.508) % 360; // Nombre d'or pour une répartition harmonieuse
+                    colors.push(`hsl(${hue}, 70%, 60%)`);
+                }
+                return colors;
+            };
+            
+            currentLocationChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: locationData.locations,
+                    datasets: [{
+                        data: locationData.counts,
+                        backgroundColor: generateColors(locationData.locations.length),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                padding: 8,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         // Graphique d'évolution temporelle avec trois courbes
         function initTimelineChart() {
             const ctx = document.getElementById('timelineChart').getContext('2d');
@@ -517,7 +585,8 @@
                 riskItem.innerHTML = `
                     <div>
                         <strong>${zone.location}</strong><br>
-                        <small>${zone.count} poubelles • ${zone.lastUpdate}</small>
+                        <small>${zone.count} poubelles (${zone.fullCount} pleines, ${zone.emptyCount} vides) • ${zone.fullPercentage}% pleines</small><br>
+                        <small>Dernière mise à jour: ${zone.lastUpdate}</small>
                     </div>
                     <div class="risk-level risk-${zone.level}">
                         ${zone.level === 'high' ? 'Élevé' : zone.level === 'medium' ? 'Moyen' : 'Faible'}
@@ -594,8 +663,11 @@
             document.getElementById('total-uploads').textContent = uploadStats.totalUploads || 0;
             document.getElementById('total-bins').textContent = uploadStats.totalBins || 0;
             document.getElementById('avg-file-size').textContent = (uploadStats.avgFileSize || 0) + ' MB';
-            document.getElementById('empty-percentage').textContent = (uploadStats.emptyPercentage || 0) + '%';
-            document.getElementById('full-percentage').textContent = (uploadStats.fullPercentage || 0) + '%';
+            
+            // Mettre à jour le combined-percentage avec les vraies données
+            const emptyPercentage = uploadStats.emptyPercentage || 0;
+            const fullPercentage = uploadStats.fullPercentage || 0;
+            document.getElementById('combined-percentage').textContent = `${emptyPercentage}% / ${fullPercentage}%`;
         }
 
         // Fonction pour rafraîchir le dashboard
@@ -606,6 +678,7 @@
             // Mettre à jour tous les composants
             updateMapMarkers();
             initChart();
+            initLocationChart();
             initTimelineChart();
             generateRiskZones();
             generateHistory();
@@ -634,6 +707,7 @@
             // Initialiser tous les composants avec les vraies données
             initMap();
             initChart();
+            initLocationChart();
             initTimelineChart();
             generateRiskZones();
             generateHistory();

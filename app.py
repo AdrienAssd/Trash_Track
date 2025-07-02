@@ -1,3 +1,6 @@
+# ================================================================
+# IMPORTS ET CONFIGURATION
+# ================================================================
 import json
 import os
 import sqlite3
@@ -85,6 +88,10 @@ def init_db():
 
 init_db()
 
+# ================================================================
+# FONCTIONS UTILITAIRES POUR LE TRAITEMENT D'IMAGES
+# ================================================================
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
@@ -156,6 +163,10 @@ def predict_image_category(filepath):
     pred = model.predict(img_array)[0][0]
     label = "dirty" if pred > 0.5 else "clean"
     return label
+
+# ================================================================
+# FONCTIONS UTILITAIRES POUR LA GÉOLOCALISATION
+# ================================================================
 
 def generate_random_paris_coordinates(seed_id):
     """
@@ -377,6 +388,10 @@ def get_paris_district_from_coordinates(lat, lng):
             closest_district = district["name"]
     
     return closest_district
+
+# ================================================================
+# ROUTES FLASK - INTERFACE WEB
+# ================================================================
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -719,7 +734,10 @@ def dashboard_data():
                 risk_zones.append({
                     'location': location,
                     'level': level,
-                    'count': stats['full'],
+                    'count': stats['total'],  # Nombre total de poubelles dans l'arrondissement
+                    'fullCount': stats['full'],  # Nombre de poubelles pleines
+                    'emptyCount': stats['empty'],  # Nombre de poubelles vides
+                    'fullPercentage': round(local_full_percentage, 1),  # Pourcentage de pleines
                     'lastUpdate': datetime.now().strftime('%Y-%m-%d %H:%M')
                 })
         
@@ -730,9 +748,21 @@ def dashboard_data():
                     'location': 'Zone Centre',
                     'level': 'low',
                     'count': 0,
+                    'fullCount': 0,
+                    'emptyCount': 0,
+                    'fullPercentage': 0,
                     'lastUpdate': datetime.now().strftime('%Y-%m-%d %H:%M')
                 }
             ]
+        
+        # Préparer les données de répartition géographique
+        location_distribution = {}
+        for location, stats in location_stats.items():
+            location_distribution[location] = stats['total']
+        
+        # Si aucune donnée de localisation, ajouter des données par défaut
+        if not location_distribution:
+            location_distribution = {'Zone Centre': 0}
         
         return {
             'stats': {
@@ -753,6 +783,10 @@ def dashboard_data():
                 'uploads': [timeline_data[date] for date in sorted(timeline_data.keys())],
                 'emptyUploads': [timeline_empty[date] for date in sorted(timeline_empty.keys())],
                 'fullUploads': [timeline_full[date] for date in sorted(timeline_full.keys())]
+            },
+            'locationData': {
+                'locations': list(location_distribution.keys()),
+                'counts': list(location_distribution.values())
             },
             'historyData': history_data[:50],  # Limiter aux 50 dernières images
             'riskZones': risk_zones
@@ -1144,6 +1178,10 @@ def clear_history():
 # 
 # 5. RÉPARTITION OPTIMALE : Le 15e (plus grand) a 16x16 cellules,
 #    le 2e (plus petit) a 6x6 cellules, etc.
+# ================================================================
+
+# ================================================================
+# FONCTIONS UTILITAIRES POUR LES MÉTADONNÉES EXIF
 # ================================================================
 
 def extract_exif_metadata(filepath):
