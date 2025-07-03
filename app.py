@@ -9,13 +9,12 @@ from flask import Flask, request, render_template, redirect, url_for, send_from_
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from PIL import Image
-from PIL.ExifTags import TAGS, GPSTAGS
+from PIL.ExifTags import TAGS
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
 import matplotlib
 import cv2
-import subprocess
 import tensorflow as tf
 import exifread
 
@@ -34,9 +33,6 @@ os.makedirs(EDGE_FOLDER, exist_ok=True)
 
 # Configurer le logging
 logging.basicConfig(level=logging.DEBUG)
-
-# Création dossier uploads si nécessaire
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Initialisation de la base de données
 def init_db():
@@ -1133,28 +1129,6 @@ def clear_history():
         pass
     
     return redirect(url_for('historique'))
-
-# ================================================================
-# SYSTÈME DE POSITIONNEMENT OPTIMISÉ POUR PARIS INTRA-MUROS
-# ================================================================
-# Ce module gère la génération de coordonnées GPS uniques et réalistes
-# pour les poubelles dans Paris, avec les améliorations suivantes :
-# 
-# 1. DISTRIBUTION ÉQUILIBRÉE : Chaque arrondissement a sa propre zone
-#    avec un nombre de cellules adapté à sa taille réelle
-# 
-# 2. SYSTÈME DE GRILLE INTELLIGENTE : Subdivision de chaque arrondissement
-#    en cellules pour éviter complètement la superposition visuelle
-# 
-# 3. GÉOLOCALISATION RÉALISTE : Coordonnées strictement limitées à 
-#    Paris intra-muros, excluant Vincennes, Boulogne, et la périphérie
-# 
-# 4. UNICITÉ GARANTIE : Chaque ID génère une position reproductible
-#    et unique dans sa cellule de grille assignée
-# 
-# 5. RÉPARTITION OPTIMALE : Le 15e (plus grand) a 16x16 cellules,
-#    le 2e (plus petit) a 6x6 cellules, etc.
-# ================================================================
 
 # ================================================================
 # FONCTIONS UTILITAIRES POUR LES MÉTADONNÉES EXIF

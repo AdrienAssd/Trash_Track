@@ -1,4 +1,8 @@
-flask 
-pillow 
+flask
+pillow
 numpy
+matplotlib
+opencv-python
+tensorflow
 exifread
+werkzeug
