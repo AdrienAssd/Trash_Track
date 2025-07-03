@@ -168,30 +168,6 @@ def predict_image_category(filepath):
 # FONCTIONS UTILITAIRES POUR LA GÉOLOCALISATION
 # ================================================================
 
-def generate_random_paris_coordinates(seed_id):
-    """
-    Génère des coordonnées GPS fixes dans la zone de Paris intra-muros basées sur un ID
-    Les coordonnées seront toujours les mêmes pour le même ID
-    Paris intra-muros est délimité plus précisément :
-    - Latitude: 48.815 à 48.902
-    - Longitude: 2.224 à 2.469
-    """
-    # Utiliser l'ID comme seed pour avoir des coordonnées fixes
-    random.seed(seed_id)
-    
-    # Limites plus précises de Paris intra-muros (excluant Bois de Boulogne et Vincennes)
-    lat_min, lat_max = 48.815, 48.902
-    lng_min, lng_max = 2.224, 2.469
-    
-    # Générer des coordonnées aléatoires basées sur le seed
-    latitude = random.uniform(lat_min, lat_max)
-    longitude = random.uniform(lng_min, lng_max)
-    
-    # Remettre le seed à None pour ne pas affecter d'autres générations aléatoires
-    random.seed()
-    
-    return round(latitude, 6), round(longitude, 6)
-
 def is_in_paris_bounds(lat, lng):
     """
     Vérifie si les coordonnées sont dans les limites réelles de Paris intra-muros
