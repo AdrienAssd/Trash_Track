@@ -6,3 +6,4 @@ opencv-python
 tensorflow
 exifread
 werkzeug
+scikit-image
