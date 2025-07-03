@@ -633,14 +633,14 @@ def dashboard_data():
             else:
                 file_size_ranges['> 4MB'] += 1
         
-        # Données temporelles (uploads par jour des 7 derniers jours avec séparation vides/pleines)
+        # Données temporelles (uploads par jour des 90 derniers jours avec séparation vides/pleines)
         timeline_data = {}
         timeline_empty = {}
         timeline_full = {}
         end_date = datetime.now()
         
-        # Initialiser les dictionnaires pour les 7 derniers jours
-        for i in range(7):
+        # Initialiser les dictionnaires pour les 90 derniers jours
+        for i in range(90):
             date = end_date - timedelta(days=i)
             date_str = date.strftime('%Y-%m-%d')
             timeline_data[date_str] = 0

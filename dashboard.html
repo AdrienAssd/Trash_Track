@@ -58,7 +58,7 @@
                     <div id="map"></div>
                     <div class="risk-zones">
                         <h3>Zones à Risque de Débordement</h3>
-                        <div id="riskZonesList"></div>
+                        <div id="riskZonesList" style="max-height: 500px; overflow-y: auto; padding-right: 8px;"></div>
                     </div>
                 </div>
                 
@@ -113,6 +113,15 @@
                         <span class="card-icon">⌛</span>
                         Évolution Temporelle des Poubelles
                     </h2>
+                    <div class="filter-controls" style="margin-bottom: 15px;">
+                        <select class="filter-select" id="timelineFilter" style="width: 200px;">
+                            <option value="7">7 derniers jours</option>
+                            <option value="14">14 derniers jours</option>
+                            <option value="30" selected>30 derniers jours</option>
+                            <option value="60">60 derniers jours</option>
+                            <option value="90">90 derniers jours</option>
+                        </select>
+                    </div>
                     <div class="chart-container file-size-chart">
                         <canvas id="timelineChart"></canvas>
                     </div>
@@ -502,13 +511,17 @@
                 currentTimelineChart.destroy();
             }
             
+            // Obtenir la période sélectionnée
+            const selectedDays = parseInt(document.getElementById('timelineFilter').value);
+            const filteredTimelineData = filterTimelineData(timelineData, selectedDays);
+            
             currentTimelineChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: timelineData.dates,
+                    labels: filteredTimelineData.dates,
                     datasets: [{
                         label: 'Poubelles vides',
-                        data: timelineData.emptyUploads,
+                        data: filteredTimelineData.emptyUploads,
                         borderColor: '#4CAF50',
                         backgroundColor: 'rgba(76, 175, 80, 0.1)',
                         fill: false,
@@ -516,7 +529,7 @@
                         borderWidth: 2
                     }, {
                         label: 'Poubelles pleines',
-                        data: timelineData.fullUploads,
+                        data: filteredTimelineData.fullUploads,
                         borderColor: '#f44336',
                         backgroundColor: 'rgba(244, 67, 54, 0.1)',
                         fill: false,
@@ -524,7 +537,7 @@
                         borderWidth: 2
                     }, {
                         label: 'Total',
-                        data: timelineData.uploads,
+                        data: filteredTimelineData.uploads,
                         borderColor: '#2196F3',
                         backgroundColor: 'rgba(33, 150, 243, 0.1)',
                         fill: false,
@@ -572,28 +585,160 @@
             });
         }
 
-        // Génération des zones à risque
+        // Fonction pour filtrer les données temporelles selon la période sélectionnée
+        function filterTimelineData(data, days) {
+            if (!data.dates || data.dates.length === 0) {
+                return { dates: [], uploads: [], emptyUploads: [], fullUploads: [] };
+            }
+            
+            // Calculer la date limite (il y a X jours)
+            const today = new Date();
+            today.setHours(23, 59, 59, 999); // Fin de la journée actuelle
+            const cutoffDate = new Date(today.getTime() - (days * 24 * 60 * 60 * 1000));
+            cutoffDate.setHours(0, 0, 0, 0); // Début de la journée limite
+            
+            console.log(`Filtrage des ${days} derniers jours:`);
+            console.log(`Date limite: ${cutoffDate.toISOString().split('T')[0]}`);
+            console.log(`Date actuelle: ${today.toISOString().split('T')[0]}`);
+            
+            // Filtrer les données
+            const filteredData = {
+                dates: [],
+                uploads: [],
+                emptyUploads: [],
+                fullUploads: []
+            };
+            
+            data.dates.forEach((dateStr, index) => {
+                // Essayer différents formats de date
+                let date;
+                if (dateStr.includes('/')) {
+                    // Format DD/MM/YYYY ou MM/DD/YYYY
+                    const parts = dateStr.split('/');
+                    if (parts.length === 3) {
+                        // Assumons DD/MM/YYYY (format français)
+                        date = new Date(parts[2], parts[1] - 1, parts[0]);
+                    }
+                } else if (dateStr.includes('-')) {
+                    // Format YYYY-MM-DD
+                    date = new Date(dateStr);
+                } else {
+                    // Essayer de parser directement
+                    date = new Date(dateStr);
+                }
+                
+                // Vérifier si la date est valide et dans la plage
+                if (date && !isNaN(date.getTime()) && date >= cutoffDate && date <= today) {
+                    filteredData.dates.push(dateStr);
+                    filteredData.uploads.push(data.uploads[index] || 0);
+                    filteredData.emptyUploads.push(data.emptyUploads[index] || 0);
+                    filteredData.fullUploads.push(data.fullUploads[index] || 0);
+                }
+            });
+            
+            console.log(`Données filtrées: ${filteredData.dates.length} jours sur ${data.dates.length}`);
+            console.log(`Dates incluses:`, filteredData.dates);
+            
+            return filteredData;
+        }
+
+        // Génération des zones à risque avec scroll optimisé
         function generateRiskZones() {
             const riskZonesList = document.getElementById('riskZonesList');
             
             // Vider les anciennes zones à risque
             riskZonesList.innerHTML = '';
             
-            riskZones.forEach(zone => {
+            // Trier les zones par niveau de risque (high > medium > low) puis par pourcentage
+            const sortedZones = [...riskZones].sort((a, b) => {
+                const riskOrder = { 'high': 3, 'medium': 2, 'low': 1 };
+                if (riskOrder[a.level] !== riskOrder[b.level]) {
+                    return riskOrder[b.level] - riskOrder[a.level];
+                }
+                return (b.fullPercentage || 0) - (a.fullPercentage || 0);
+            });
+            
+            sortedZones.forEach((zone, index) => {
                 const riskItem = document.createElement('div');
                 riskItem.className = `risk-zone-item risk-zone-${zone.level}`;
+                riskItem.style.cssText = `
+                    margin-bottom: 8px;
+                    padding: 12px;
+                    border-radius: 8px;
+                    border-left: 4px solid ${zone.level === 'high' ? '#f44336' : zone.level === 'medium' ? '#ff9800' : '#4caf50'};
+                    background: ${zone.level === 'high' ? 'rgba(244, 67, 54, 0.05)' : zone.level === 'medium' ? 'rgba(255, 152, 0, 0.05)' : 'rgba(76, 175, 80, 0.05)'};
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    transition: all 0.3s ease;
+                    min-height: 70px;
+                `;
+                
                 riskItem.innerHTML = `
-                    <div>
-                        <strong>${zone.location}</strong><br>
-                        <small>${zone.count} poubelles (${zone.fullCount} pleines, ${zone.emptyCount} vides) • ${zone.fullPercentage}% pleines</small><br>
-                        <small>Dernière mise à jour: ${zone.lastUpdate}</small>
+                    <div style="flex: 1;">
+                        <strong style="font-size: 14px; color: #333;">${zone.location}</strong><br>
+                        <small style="color: #666; line-height: 1.3;">
+                            ${zone.count} poubelles (${zone.fullCount} pleines, ${zone.emptyCount} vides)<br>
+                            <span style="font-weight: bold; color: ${zone.level === 'high' ? '#f44336' : zone.level === 'medium' ? '#ff9800' : '#4caf50'};">
+                                ${zone.fullPercentage}% pleines
+                            </span>
+                        </small><br>
+                        <small style="color: #999; font-size: 11px;">Dernière mise à jour: ${zone.lastUpdate}</small>
                     </div>
-                    <div class="risk-level risk-${zone.level}">
+                    <div class="risk-level risk-${zone.level}" style="
+                        padding: 6px 12px;
+                        border-radius: 20px;
+                        font-size: 12px;
+                        font-weight: bold;
+                        color: white;
+                        background: ${zone.level === 'high' ? '#f44336' : zone.level === 'medium' ? '#ff9800' : '#4caf50'};
+                        min-width: 60px;
+                        text-align: center;
+                    ">
                         ${zone.level === 'high' ? 'Élevé' : zone.level === 'medium' ? 'Moyen' : 'Faible'}
                     </div>
                 `;
+                
+                // Ajouter un effet hover
+                riskItem.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateX(2px)';
+                    this.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                });
+                
+                riskItem.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateX(0)';
+                    this.style.boxShadow = 'none';
+                });
+                
                 riskZonesList.appendChild(riskItem);
             });
+            
+            // Ajouter un style pour la scrollbar si nécessaire
+            if (riskZones.length > 4) {
+                riskZonesList.style.cssText += `
+                    scrollbar-width: thin;
+                    scrollbar-color: #ccc transparent;
+                `;
+                
+                // Ajouter les styles pour WebKit (Chrome, Safari)
+                const style = document.createElement('style');
+                style.textContent = `
+                    #riskZonesList::-webkit-scrollbar {
+                        width: 6px;
+                    }
+                    #riskZonesList::-webkit-scrollbar-track {
+                        background: transparent;
+                    }
+                    #riskZonesList::-webkit-scrollbar-thumb {
+                        background: #ccc;
+                        border-radius: 3px;
+                    }
+                    #riskZonesList::-webkit-scrollbar-thumb:hover {
+                        background: #999;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
         }
 
         // Génération de l'historique avec filtrage
@@ -694,6 +839,7 @@
             document.getElementById('endDate').addEventListener('change', updateMapMarkers);
             document.getElementById('statusFilter').addEventListener('change', generateHistory);
             document.getElementById('locationHistoryFilter').addEventListener('change', generateHistory);
+            document.getElementById('timelineFilter').addEventListener('change', initTimelineChart);
         }
 
         // Exposer la fonction de rafraîchissement globalement
@@ -713,11 +859,6 @@
             generateHistory();
             updateStats();
             setupEventListeners();
-            
-            // Rafraîchir automatiquement toutes les 30 secondes pour détecter les changements
-            setInterval(async function() {
-                await refreshDashboard();
-            }, 30000); // 30 secondes
         });
     </script>
     <script src="static/js/header-effects.js"></script>
