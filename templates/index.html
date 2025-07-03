@@ -33,13 +33,14 @@
                                 <form method="POST" enctype="multipart/form-data">
                                     <label for="file-upload" class="upload-btn" title="Cliquer pour uploader une image" style="cursor:pointer;display:inline-block;">
                                         <img src="{{ url_for('static', filename='images/Upload_button.png') }}" alt="Icône d'upload" width="48" height="48">
-                                        <input id="file-upload" type="file" name="file" required style="display:none;" onchange="this.form.submit()">
+                                        <input id="file-upload" type="file" name="file" accept=".png,.jpg,.jpeg,.gif" required style="display:none;" onchange="validateFileAndSubmit(this)">
                                     </label>
                                 </form>
                             </div>
                         </div>
                     </div>
                 </div>
+                
                 <div class="image-preview">
                     {% if latest_image %}
                     <h3>Dernière image analysée</h3>
@@ -137,6 +138,32 @@
 
     <script src="{{ url_for('static', filename='js/header-effects.js') }}"></script>
     <script>
+        // Fonction pour valider le format de fichier avant soumission
+        function validateFileAndSubmit(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            // Extensions acceptées (d'après app.py)
+            const allowedExtensions = ['png', 'jpg', 'jpeg', 'gif'];
+            const fileName = file.name.toLowerCase();
+            const fileExtension = fileName.split('.').pop();
+            
+            // Vérifier si l'extension est autorisée
+            if (!allowedExtensions.includes(fileExtension)) {
+                alert(`❌ Format de fichier non supporté !\n\n` +
+                      `Format détecté : ${fileExtension.toUpperCase()}\n` +
+                      `Formats acceptés : PNG, JPG, JPEG, GIF\n\n` +
+                      `Veuillez sélectionner un fichier image dans un format supporté.`);
+                
+                // Réinitialiser le champ de fichier
+                input.value = '';
+                return false;
+            }
+            
+            // Si le format est correct, soumettre le formulaire
+            input.form.submit();
+        }
+        
         // Green IT - Lazy Loading Implementation for index page
         function initLazyLoading() {
             const lazyImages = document.querySelectorAll('.lazy-image');
