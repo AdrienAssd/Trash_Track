@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 import logging
 import matplotlib
 import cv2
-import tensorflow as tf
 import exifread
+from skimage.measure import shannon_entropy
 
 # Forcer Matplotlib à utiliser un backend non interactif
 matplotlib.use('Agg')
@@ -143,22 +143,251 @@ def detect_edges(filepath):
         cv2.imwrite(edge_path, edges)
         return edge_path.replace('\\', '/')
 
-# Charger le modèle une seule fois au démarrage
-model = tf.keras.models.load_model("model_trash_classifier.h5")
+# Nouvelle fonction de classification basée sur des règles heuristiques
 
-# Fonction pour prédire la catégorie d'une image
-def predict_image_category(filepath):
-    from tensorflow.keras.preprocessing import image
-    from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+def is_poubelle_pleine_v3(image_path):
+    """
+    Détermine si une poubelle est pleine (dirty) ou vide (clean) à partir de règles heuristiques pondérées.
+    Version optimisée avec des seuils adaptatifs et une logique affinée.
+    """
+    img_color = cv2.imread(image_path)
+    if img_color is None:
+        logging.warning(f"Image introuvable : {image_path}")
+        return "clean"  # Défaut
+    img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
+    img_gray = cv2.GaussianBlur(img_gray, (5, 5), 0)
 
-    img = image.load_img(filepath, target_size=(224, 224))
-    img_array = image.img_to_array(img)
-    img_array = preprocess_input(img_array)
-    img_array = np.expand_dims(img_array, axis=0)
+    # Conversion en HSV pour l'analyse de variation
+    hsv = cv2.cvtColor(img_color, cv2.COLOR_BGR2HSV)
 
-    pred = model.predict(img_array)[0][0]
-    label = "dirty" if pred > 0.5 else "clean"
-    return label
+    # CRITÈRES HSV : Variation (écart-type) - OPTIMISÉS
+    h_std = np.std(hsv[:, :, 0])  # Variation de teinte
+    s_std = np.std(hsv[:, :, 1])  # Variation de saturation  
+    v_std = np.std(hsv[:, :, 2])  # Variation de luminosité
+
+    # NOUVEAUTÉ : Seuils adaptatifs basés sur la luminosité moyenne
+    mean_brightness = np.mean(hsv[:, :, 2])
+
+    # Ajuster les seuils selon les conditions d'éclairage
+    if mean_brightness < 80:  # Image sombre
+        h_threshold = 40
+        s_threshold = 30
+        v_threshold = 45
+    elif mean_brightness > 180:  # Image très claire
+        h_threshold = 50
+        s_threshold = 40
+        v_threshold = 55
+    else:  # Éclairage normal
+        h_threshold = 45
+        s_threshold = 35
+        v_threshold = 50
+
+    # Contours avec analyse améliorée
+    edges = cv2.Canny(img_gray, 50, 150)
+    white_density = cv2.countNonZero(edges) / edges.size
+
+    # OPTIMISATION : Analyse des contours avec pondération par taille
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    irregular = 0
+    large_irregular = 0  # Nouveauté : contours irréguliers significatifs
+
+    for c in contours:
+        area = cv2.contourArea(c)
+        if area < 100:  # Réduire le seuil pour capturer plus de détails
+            continue
+        perimeter = cv2.arcLength(c, True)
+        if perimeter == 0:
+            continue
+        circularity = 4 * np.pi * (area / (perimeter ** 2))
+        if circularity < 0.5:
+            irregular += 1
+            if area > 1000:  # Contours irréguliers importants
+                large_irregular += 1
+
+    # Moyennes HSV
+    mean_saturation = np.mean(hsv[:, :, 1])
+    mean_value = np.mean(hsv[:, :, 2])
+
+    # NOUVEAUTÉ : Analyse de la distribution des couleurs
+    # Calculer la diversité des couleurs (nombre de couleurs dominantes)
+    colors_flat = hsv.reshape(-1, 3)
+    unique_hues = len(np.unique(colors_flat[:, 0][colors_flat[:, 1] > 30]))  # Hues avec saturation suffisante
+
+    # Analyse par blocs améliorée (plus fine : 4x4)
+    h, w = edges.shape
+    block_alerts = 0
+    high_density_blocks = 0  # Nouveauté : blocs avec très haute densité
+
+    for i in range(4):  # 4x4 au lieu de 3x3
+        for j in range(4):
+            roi = edges[i*h//4:(i+1)*h//4, j*w//4:(j+1)*w//4]
+            density = cv2.countNonZero(roi) / roi.size
+            if density > 0.05:  # Seuil abaissé pour plus de sensibilité
+                block_alerts += 1
+            if density > 0.15:  # Très haute densité
+                high_density_blocks += 1
+
+    # Texture (entropie)
+    entropy = shannon_entropy(img_gray)
+
+    # NOUVEAUTÉ : Analyse de la texture locale
+    # Diviser l'image en régions et calculer l'entropie locale
+    local_entropies = []
+    for i in range(3):
+        for j in range(3):
+            roi = img_gray[i*h//3:(i+1)*h//3, j*w//3:(j+1)*w//3]
+            if roi.size > 0:
+                local_entropies.append(shannon_entropy(roi))
+
+    entropy_variance = np.var(local_entropies) if local_entropies else 0
+
+    # CALCUL DU SCORE OPTIMISÉ ET ÉQUILIBRÉ
+    score = 0
+
+    # 1. Critères HSV avec logique affinée et seuils plus stricts
+    hsv_variation_score = 0
+    if h_std > h_threshold:
+        hsv_variation_score += 1
+    if s_std > s_threshold:
+        hsv_variation_score += 1
+    if v_std > v_threshold:
+        hsv_variation_score += 1
+
+    # Score HSV avec pondération plus conservative
+    if hsv_variation_score >= 3:
+        score += 3  # Réduit de 4 à 3
+    elif hsv_variation_score == 2:
+        score += 2
+    elif hsv_variation_score == 1:
+        score += 1
+
+    # 2. Critères de densité et contours (seuils plus stricts)
+    if white_density > 0.12:  # Seuil plus strict
+        score += 2
+    elif white_density > 0.08:
+        score += 1
+
+    if large_irregular >= 4:  # Seuil plus strict
+        score += 2
+    elif irregular >= 25:  # Seuil plus strict
+        score += 1
+
+    # 3. Critères de couleur et saturation (plus stricts)
+    if mean_saturation > 60:  # Seuil plus strict
+        score += 1
+    if unique_hues > 170:  # Seuil plus strict
+        score += 1
+
+    # 4. Critères de blocs et texture (plus stricts)
+    if high_density_blocks >= 3:  # Seuil plus strict
+        score += 2
+    elif block_alerts >= 8:  # Seuil plus strict
+        score += 1
+
+    if entropy > 7.4:  # Seuil plus strict
+        score += 1
+    if entropy_variance > 0.5:  # Seuil plus strict
+        score += 1
+
+    # CAS PARTICULIERS OPTIMISÉS POUR AMÉLIORER LA DÉTECTION CLEAN
+
+    # 1. Image très uniforme (probablement clean) - RENFORCÉ DAVANTAGE
+    uniformity_score = 0
+    if h_std < h_threshold * 0.8:  # Seuil encore moins strict
+        uniformity_score += 1
+    if s_std < s_threshold * 0.8:  # Seuil encore moins strict
+        uniformity_score += 1
+    if v_std < v_threshold * 0.8:  # Seuil encore moins strict
+        uniformity_score += 1
+    if white_density < 0.06:  # Seuil relevé
+        uniformity_score += 1
+    if unique_hues < 140:  # Seuil relevé pour plus de tolérance
+        uniformity_score += 1
+    if irregular < 20:  # Nouveau critère : peu de contours irréguliers
+        uniformity_score += 1
+
+    # Force "clean" plus facilement
+    if uniformity_score >= 4:  # Seuil abaissé de 3 à 4 mais sur 6 critères
+        return "clean"
+
+    # 2. Cas d'ombre ou faible contraste - ÉLARGI
+    if irregular < 10 and white_density < 0.07 and mean_value < 100:  # Seuils élargis
+        return "clean"
+
+    # 3. Image très texturée mais probablement clean - ÉLARGI
+    if entropy > 7.3 and hsv_variation_score <= 1 and irregular < 15 and white_density < 0.08:  # Seuils élargis
+        return "clean"
+
+    # 4. Image claire et uniforme - ÉLARGI
+    if mean_brightness > 140 and uniformity_score >= 3 and white_density < 0.07:  # Seuils élargis
+        return "clean"
+
+    # 5. NOUVEAU : Critère spécial pour images avec faible variation HSV
+    if hsv_variation_score == 0 and white_density < 0.08 and irregular < 25:
+        return "clean"
+
+    # 6. NOUVEAU : Réduction de score plus agressive pour images potentiellement clean
+    clean_indicators = 0
+    if uniformity_score >= 3:  # Seuil abaissé
+        clean_indicators += 1
+    if white_density < 0.06:  # Seuil relevé
+        clean_indicators += 1
+    if irregular < 20:  # Seuil relevé
+        clean_indicators += 1
+    if unique_hues < 150:  # Seuil relevé
+        clean_indicators += 1
+    if hsv_variation_score <= 1:  # Nouveau critère
+        clean_indicators += 1
+
+    if clean_indicators >= 3:
+        score = max(0, score - 3)  # Réduction plus agressive (était -2)
+    elif clean_indicators >= 2:
+        score = max(0, score - 1)  # Réduction partielle
+
+    # 7. Forte indication de déchets (critères maintenus mais ajustés)
+    strong_dirty_indicators = 0
+    if hsv_variation_score >= 3:  # Plus strict
+        strong_dirty_indicators += 1
+    if large_irregular >= 3:  # Plus strict
+        strong_dirty_indicators += 1
+    if high_density_blocks >= 2:  # Plus strict
+        strong_dirty_indicators += 1
+    if unique_hues > 170:  # Plus strict
+        strong_dirty_indicators += 1
+    if white_density > 0.10:  # Plus strict
+        strong_dirty_indicators += 1
+
+    if strong_dirty_indicators >= 3:
+        return "dirty"
+
+    logging.debug(f"Image: {image_path}")
+    logging.debug(f"  ➤ Variation teinte (H) : {h_std:.2f} (seuil: {h_threshold})")
+    logging.debug(f"  ➤ Variation saturation (S) : {s_std:.2f} (seuil: {s_threshold})")
+    logging.debug(f"  ➤ Variation luminosité (V) : {v_std:.2f} (seuil: {v_threshold})")
+    logging.debug(f"  ➤ Score variation HSV : {hsv_variation_score}/3")
+    logging.debug(f"  ➤ Luminosité moyenne : {mean_brightness:.2f}")
+    logging.debug(f"  ➤ Densité de blancs : {white_density:.2%}")
+    logging.debug(f"  ➤ Contours irréguliers : {irregular} (grands: {large_irregular})")
+    logging.debug(f"  ➤ Couleurs uniques : {unique_hues}")
+    logging.debug(f"  ➤ Blocs d'alerte : {block_alerts} (haute densité: {high_density_blocks})")
+    logging.debug(f"  ➤ Entropie : {entropy:.2f} (variance: {entropy_variance:.3f})")
+    logging.debug(f"  ➤ Uniformité : {uniformity_score}/5, Clean indicators: {clean_indicators}/4")
+    logging.debug(f"  ➤ Score final : {score}")
+
+    # Seuil adaptatif plus intelligent et équilibré
+    if mean_brightness < 80:  # Image sombre
+        threshold = 8  # Plus strict
+    elif mean_brightness > 180:  # Image très claire
+        threshold = 7  # Plus strict
+    elif uniformity_score >= 2:  # Image potentiellement uniforme
+        threshold = 7  # Plus strict
+    else:  # Conditions normales
+        threshold = 6  # Plus strict que 5
+
+    return "dirty" if score >= threshold else "clean"
+
+# Remplacement de la fonction predict_image_category
+predict_image_category = is_poubelle_pleine_v3
 
 # ================================================================
 # FONCTIONS UTILITAIRES POUR LA GÉOLOCALISATION
